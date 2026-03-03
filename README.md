@@ -39,6 +39,7 @@ Used by .NET/Go to interact with the Rust Kernel across the binary boundary:
 ## 5. The "Law" (JSON Specification)
 VPE supports complex enterprise features like Lazy Migration and Saga Patterns directly in the schema.
 
+```JSON
 {
   "domain": "OrderManagement",
   "version": "2.0.0",
@@ -65,8 +66,7 @@ VPE supports complex enterprise features like Lazy Migration and Saga Patterns d
     }
   ]
 }
-
-
+```
 
 ## 6. Safety & Invariants
 - Deterministic Replay: Given the same history and context, the verdict is always the same.
