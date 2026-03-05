@@ -1,0 +1,7 @@
+[workspace]
+members = [
+	"vpe-core",
+	"vpe-ffi",
+]
+resolver = "2"
+
