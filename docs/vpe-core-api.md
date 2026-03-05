@@ -1,64 +1,79 @@
-# The Rust Minimal API
+# VPE COMPONENT API SPECIFICATION
 
-## Core
+## 1. THE LOGIC REGISTRY (GuardRegistry)
+This module acts as the "Linker." It stores the definitions of what the engine "knows" how to do.
 
-This API focuses on the lifecycle of a Process: Compile, Store, and Evaluate.
+- GuardRegistry::new(): Creates a fresh registry with core system guards (e.g., Equals, Exists).
+- GuardRegistry::register_custom(id: &str, factory: Fn): Allows developers to inject domain-specific logic.
+- GuardRegistry::get_implementation(id: &str): Returns the trait object for the Compiler to bind into the DAG.
 
-| Function / Field                          | Description                                                |
-| ----------------------------------------- | ---------------------------------------------------------- |
-| `VpeCompiler::compile(json: &str)`        | Validates topology, cycles, and logic; returns a VpeDag.   |
-| `VpeRegistry::insert(name, version, dag)` | Stores a compiled graph in a thread-safe `Arc<RwLock<T>>`. |
-| `VpeDag::evaluate(...)`                   | The primary execution loop; returns a Verdict.             |
-| `VpeDag::simulate_migration(...)`         | Checks if old data can "lift" into this DAG version        |
+## 2. THE COMPILER MODULE (VpeCompiler)
+The Compiler is a stateful service that requires the GuardRegistry to "hydrate" the JSON into a runnable graph.
 
+- VpeCompiler::new(registry: Arc<GuardRegistry>): Initialized with the available logic blueprints.
+- VpeCompiler::validate(json: &str): Performs a "Dry Parse" to catch syntax and topological errors.
+- VpeCompiler::compile(json: &str): The "Assembler." It produces a VpeDag where all strings are resolved to indices and trait pointers.
+
+## 3. THE DAG STORAGE (ProcessStore)
+This is where the "Laws" live once they are compiled.
+
+- ProcessStore::insert(domain: &str, version: &str, dag: VpeDag): Adds a new law to the library.
+- ProcessStore::get(domain: &str, version: &str): Retrieves a specific version of a process.
+- ProcessStore::get_latest(domain: &str): Retrieves the most recent version for new records.
+
+## 4. THE RUNTIME & EVALUATOR (VpeRuntime)
+The high-speed execution core.
+
+- VpeRuntime::evaluate(dag, current_state_idx, action, context, history): The O(1) loop that returns a Verdict.
+- VpeRuntime::check_guards(edge, context, history): Internal helper that short-circuits if any guard fails.
+
+## 5. THE MIGRATION & TRANSFORM MODULE (MigrationEngine)
+Handles "Lifting" records between versions of the law.
+
+- MigrationEngine::needs_lift(record_version, target_version): Boolean check for version drift.
+- MigrationEngine::transform(context, transforms_json): Reshapes data (e.g., merging fields) based on migration rules.
+- MigrationEngine::lift(record, target_dag): Runs Migration Guards to determine the "Landing State" in the new version.
+
+## 6. THE DRY-RUN MODULE (SimulationEngine)
+Used for pre-deployment impact analysis.
+
+- SimulationEngine::replay_history(target_dag, history, initial_context): Re-runs every past event against new rules.
+- SimulationEngine::analyze_impact(records_sample, new_dag): Produces a report of Seamless vs. Incompatible migrations.
+
+## 7. THE CORE FACADE (VpeEngine)
+The primary entry point that orchestrates all other modules.
 ```Rust
-// The primary entry point for the Library
 pub struct VpeEngine {
-    registry: Arc<VpeRegistry>,
+    guards: Arc<GuardRegistry>,
+    processes: Arc<ProcessStore>,
+    compiler: VpeCompiler,
 }
 
 impl VpeEngine {
-    /// Loads and validates a new version of a process
-    pub fn register_process(&self, name: &str, json: &str) -> Result<(), CompileError>;
-
-    /// The "Pure" execution call
-    pub fn execute(
-        &self,
-        domain: &str,
-        version: &str,
-        current_state: &str,
-        action: &str,
-        context: HashMap<String, Value>,
-        history: Vec<VpeEvent>
-    ) -> Result<VpeVerdict, VpeError>;
+    pub fn register_process(&self, json: &str) -> Result<(), VpeError>;
+    pub fn execute(&self, request: VpeRequest) -> Result<VpeVerdict, VpeError>;
+    pub fn simulate(&self, domain: &str, target_version: &str, data: VpeSnapshot) -> SimulationReport;
 }
-
 ```
+## 8. THE FFI BRIDGE (The "C" Interface)
+The binary gateway for .NET, Go, and Python.
 
-## The FFI Bridge API (The "C" Interface)
+- vpe_init(): Returns a pointer to the VpeEngine.
+- vpe_load_law(engine_ptr, json): Compiles and stores a process.
+- vpe_evaluate_ffi(engine_ptr, domain, action, ...): The main execution bridge.
+- vpe_free_verdict(ptr): The mandatory memory cleanup for FFI-allocated results.
 
-This is what the .NET or Go library "sees" when it loads your .so or .dll.
-
-| Function              | Purpose                                                                    |
-| --------------------- | -------------------------------------------------------------------------- |
-| vpe_init()            | Initializes the engine and registry in Rust memory.                        |
-| vpe_load_graph(json)  | Compiles and registers a graph; returns a success boolean.                 |
-| vpe_evaluate_ffi(...) | Passes pointers for strings/JSON; returns a pointer to FfiVerdict.         |
-| vpe_free_verdict(ptr) | CRITICAL: Frees the Rust-allocated memory for the verdict and its strings. |
-## The Comprehensive JSON Schema
-
-This JSON represents "The Law" for a specific domain (e.g., OrderManagement). It includes branching, temporal guards, and migration rules.
-
+## 9. THE COMPREHENSIVE JSON SCHEMA ("The Law")
+This represents a single version of a process flow.
 ```JSON
 {
   "domain": "OrderManagement",
   "version": "2.0.0",
-  "supersedes": "1.0.0",
+  "supersedes": ["1.0.0", "1.1.0"],
   "initial_state": "Draft",
 
   "migration_rules": [
     {
-      "comment": "Move V1 'Pending' to V2 'AwaitingTax' if TaxID is missing",
       "from_state": "Pending",
       "to_state": "AwaitingTaxInfo",
       "guards": [{ "type": "MissingField", "path": "entity.TaxID" }],
@@ -95,23 +110,13 @@ This JSON represents "The Law" for a specific domain (e.g., OrderManagement). It
           ]
         }
       ]
-    },
-    { "name": "Processing" },
-    { "name": "Closed" }
+    }
   ]
 }
 ```
+## 10. SUMMARY OF INVARIANTS
 
-### JSON Field Explanations:
-- supersedes: Tells the Migration Engine which version this DAG is allowed to "lift" records from.
-- migration_rules: A list of "Mapings." If a record comes in on an old version, these rules tell the engine how to transform the data and choose the new starting state.
-- priority: If multiple transitions match the same action (e.g., two "Submit" paths), the engine picks the one with the highest number.
-- guards: The "Gatekeepers."
-    - OccurredWithin: A Temporal Guard that scans the history for a specific event.
-- effects: The "Orders."
-on_success / on_failure: These are the Saga Callbacks. The Compiler ensures the to state (Processing) has handlers for these specific strings.
-
-## Summary of Invariants for the API
-1. Immutability: Once a DAG is registered in the VpeEngine, it cannot be modified. You must register a new version.
-2. Memory Safety: The FFI bridge uses Box::into_raw to hand off memory. The caller owns the responsibility to call the free function.
-3. Strict Typing: The JSON is strictly validated against a Schema during the register_process call. If the JSON is "loose," the Rust compiler rejects it.
+- Decoupled Registry: The Logic (Guards) is defined once at start-up; the Laws (DAGs) are loaded dynamically.
+- Index-Based DAG: Once compiled, all state references are usize indices, making the Runtime branch-prediction friendly.
+- Forced Cleanup: Any FFI-allocated struct has a corresponding vpe_free_* function to prevent memory leaks in the host language.
+- Determinism: The Runtime never queries an external DB. All data must be in the Context or History.
