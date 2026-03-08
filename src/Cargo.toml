@@ -1,6 +1,6 @@
 [workspace]
 members = [
-	"vpe-core",
+	"vpe-core", "vpe-demo",
 	"vpe-ffi",
 ]
 resolver = "2"

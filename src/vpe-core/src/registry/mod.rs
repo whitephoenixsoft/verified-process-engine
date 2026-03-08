@@ -1,18 +1,13 @@
 use serde_json::Value;
 use super::Guard;
+use super::ContextMap;
 
-pub struct EqualsGuard {
-    pub path: String,
-    pub expected: Value,
+
+pub struct VpeEvent {
+    pub action: String,
+    pub timestamp: u64, // Unix epoch
 }
 
-impl Guard for EqualsGuard {
-    fn check(&self, context: &ContextMap, history: &[VpeEvent]) -> bool {
-        context.get(&self.path)
-            .map(|val| val == &self.expected)
-            .unwrap_or(false)
-    }
-}
 
 use std::collections::HashMap;
 use std::sync::Arc;

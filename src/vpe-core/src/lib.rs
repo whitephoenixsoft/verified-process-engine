@@ -1,27 +1,25 @@
 pub mod registry;
 
+use std::collections::HashMap;
+use serde_json::Value;
+
+/// The ContextMap is a flat dictionary of namespaced keys
+pub type ContextMap = HashMap<String, Value>;
+
 pub trait Guard: Send + Sync {
     fn check(&self, context: &ContextMap, history: &[VpeEvent]) -> bool;
 }
 
-pub struct VpeDag {
-    pub nodes: Vec<Node>,
-}
-
-pub struct Edge {
-    pub action: String,
-    pub priority: u32,
-    pub target_idx: usize,
-    pub guards: Vec<Box<dyn Guard>>,
-    pub effects: Vec<String>,
-}
-
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct VpeEvent {
+    pub trace_id: String,      // The "Thread" connecting all actions
     pub timestamp: i64,
+    pub actor: String,         // Who (System/User/AI)?
     pub action: String,
     pub was_successful: bool,
     pub state_before: String,
     pub state_after: String,
+        pub metadata: Value,       // Any extra context
 }
 
 pub struct VpeEngine {
