@@ -29,6 +29,24 @@ pub struct ConditionalTransform {
     pub ops: Vec<TransformOp>,       // The actual data reshaping
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct MigrationEvent {
+    pub trace_id: String,
+    pub event_type: String, // Always "SYS_MIGRATION_LIFT"
+    pub from_version: String,
+    pub to_version: String,
+    pub from_state: String,
+    pub to_state: String,
+    pub timestamp: u64,
+    pub metadata: MigrationMetadata,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct MigrationMetadata {
+    pub ops_executed: usize,
+    pub trigger: String, // e.g., "Auto-Update" or "Manual-Lift"
+}
+
 impl MigrationEngine {
     pub fn lift(
         current_state: &str,
