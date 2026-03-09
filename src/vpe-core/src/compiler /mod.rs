@@ -94,11 +94,54 @@ pub struct VpeCompiler {
     registry: Arc<GuardRegistry>,
 }
 
+
 impl VpeCompiler {
+    //for migrations
+    pub fn compile_and_validate(&mut self, json: &str) -> Result<VpeDag, String> {
+        let raw: RawVpeJson = serde_json::from_str(json).map_err(|e| e.to_string())?;
+
+        // PHASE 1: Build the Graph
+        let mut dag = self.build_dag(&raw)?;
+
+        // PHASE 2: Audit Migrations
+        for rule in &raw.migrations {
+            // 1. Verify Destination State
+            if !dag.state_exists(&rule.to_state) {
+                return Err(format!(
+                    "Migration Error: Destination state '{}' does not exist in version {}.",
+                    rule.to_state, raw.version
+                ));
+            }
+
+            // 2. Verify Transforms
+            for op in &rule.transforms {
+                match op {
+                    TransformOp::Move { from: _, to } | TransformOp::Set { target: to, .. } => {
+                        // Re-use our "Naming Police" and "Schema Check"
+                        self.validate_identifier_structure(to)?;
+                        self.validate_write_path(to, &raw.domain)?; 
+                        // Ensures 'to' is in the DomainSchema and NOT sys.*
+                    },
+                    _ => {}
+                }
+            }
+
+            // 3. Verify Migration Guards
+            for guard in &rule.migration_guards {
+                let path = guard["path"].as_str().ok_or("Missing path in migration guard")?;
+                self.validate_path(path, &raw.domain, false)?; // Read-only check
+                self.audit_type(path, &guard["value"], &raw.domain)?; // Type check
+            }
+        }
+
+        Ok(dag)
+    }
+
     pub fn new(registry: Arc<GuardRegistry>) -> Self {
         Self { registry }
     }
 
+    //regular compiling
     pub fn compile(&self, json_str: &str) -> Result<VpeDag, String> {
         // 1. Parse JSON into temporary raw structs
         let raw: RawProcess = serde_json::from_str(json_str)
@@ -156,6 +199,7 @@ impl VpeCompiler {
         })
     }
     
+    //for names and types specified
     pub fn compile_edge(&self, raw_edge: &RawEdge, domain: &str) -> Result<Edge, String> {
         // 1. Validate Identifier Characters & Structure
         for guard in &raw_edge.guards {
@@ -232,6 +276,7 @@ impl VpeCompiler {
         }
     }
 
+    //that names exist
     fn check_schema(&self, full_path: &str, domain: &str) -> Result<(), String> {
         let (ns, path) = full_path.split_once('.')
             .ok_or_else(|| format!("Invalid path format: {}", full_path))?;
@@ -248,6 +293,7 @@ impl VpeCompiler {
         Err(format!("Path '{}.{}' not found in {} schema", ns, path, domain))
     }
     
+    //check types in guards
     fn audit_type(&self, path: &str, json_value: &serde_json::Value, domain: &str) -> Result<(), String> {
         // 1. Skip validation for sys.* as they are internal and trusted
         if path.starts_with("sys.") {

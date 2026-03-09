@@ -1,10 +1,32 @@
 pub struct MigrationEngine;
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TransformOp {
+    /// Renames or moves a key. (e.g., "old_age" -> "rec.user.age")
+    Move { from: String, to: String },
+
+    /// Hardcodes a specific value into a path.
+    Set { target: String, value: serde_json::Value },
+
+    /// Translates a value based on a dictionary. 
+    /// (e.g., "1" becomes "High", "2" becomes "Medium")
+    Map { 
+        target: String, 
+        from: String, 
+        mapping: HashMap<String, serde_json::Value> 
+    },
+}
+
 pub struct MigrationRule {
     pub from_state: String,
     pub to_state: String,
     pub migration_guards: Vec<Box<dyn Guard>>,
     pub transforms: Vec<TransformOp>,
+}
+
+pub struct ConditionalTransform {
+    pub guards: Vec<Box<dyn Guard>>, // Reusing our existing Guard system!
+    pub ops: Vec<TransformOp>,       // The actual data reshaping
 }
 
 impl MigrationEngine {
@@ -81,4 +103,20 @@ impl MigrationEngine {
         Ok(())
     }
 
+    pub fn apply_conditional_transforms(
+        mut context: ContextMap,
+        history: &[VpeEvent],
+        transforms: &[ConditionalTransform]
+    ) -> Result<ContextMap, String> {
+        for ct in transforms {
+            // Re-use the existing Guard logic from the Runtime
+            let should_apply = ct.guards.iter().all(|g| g.check(&context, history));
+
+            if should_apply {
+                // Apply the inner operations if guards pass
+                context = Self::execute_ops(context, &ct.ops)?;
+            }
+        }
+        Ok(context)
+    }
 }

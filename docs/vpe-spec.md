@@ -154,3 +154,45 @@ No sequence of 'Auto-Transitions' (transitions triggered by internal effects) ma
 | Compiler | Validate & Inflate      | Optimized Memory DAG           |
 | DAG      | Represent the Flow      | High-speed "Instruction Set"   |
 | Runtime  | Evaluate Reality        | Deterministic "Verdict"        |
+
+----
+
+# VPE SDK: Module Specifications (V1.0 - 2026)
+
+## 1. Registry Module (The Vocabulary)
+The Registry acts as the engine's "dictionary," mapping JSON strings to Rust logic.
+- **Factory Pattern:** Uses a closure-based factory to hydrate Guard traits from JSON parameters.
+- **Extensibility:** Allows the Host to register custom logic (e.g., specialized math or geo-fencing) before compilation.
+- **Statelessness:** Guards are immutable once registered; configuration is passed at hydration time.
+
+## 2. Compiler Module (The Architect)
+A Two-Phase validator that transforms raw JSON into a "Verified Logic Graph."
+- **Phase 1 (The World):** Constructs the State Machine (DAG) and initializes the Domain Schema.
+- **Phase 2 (The Bridge):** Audits Migration Rules against the baked DAG to prevent "Ghost State" errors.
+- **Identifier Policing:** Validates all paths against alphanumeric standards and mandatory dot-notation.
+- **Type Auditing:** Cross-references JSON values against the Domain Schema to ensure type-safe comparisons.
+
+## 3. Runtime Module (The Muscle)
+A high-performance execution loop optimized for sub-10 microsecond decisions.
+- **Index Jumps:** Navigates the DAG using memory offsets (usize) rather than string lookups.
+- **Short-Circuit Logic:** Evaluates guards in sequence, exiting the transition as soon as a "False" is hit.
+- **Pure Functionality:** The Runtime is side-effect-free; it produces a "Verdict" rather than modifying state directly.
+
+## 4. Simulation Engine (The Time Machine)
+The Dry-Run module used for pre-deployment risk analysis.
+- **History Replay:** Re-runs historical "Humidity Events" (The Chronicle) against new versions of the Law.
+- **Impact Analysis:** Categorizes migrations as "Seamless" (identical outcome), "Divergent" (new outcome), or "Incompatible" (stuck).
+- **TraceID Correlation:** Uses unique identifiers to track a record's journey across multiple versions.
+
+## 5. Migration Engine (The Bridge)
+Handles the physical "Lifting" of records between versions.
+- **Conditional Transforms:** Uses existing Guard logic to decide when and how to reshape data.
+- **TransformOps:** Supports Move (renaming), Set (injecting), and Map (translating) operations.
+- **Version Drift Detection:** Provides an O(1) check to determine if a record requires a version lift.
+
+## 6. FFI & Marshaling (The Bridge)
+The C-ABI layer providing native access for .NET and Java.
+- **Opaque Pointers:** Keeps Rust memory management hidden from the Host.
+- **JSON Marshaling:** Uses JSON strings for complex input (Context/History) to maintain a language-agnostic API.
+- **Memory Handshake:** Provides explicit "Free" functions to prevent RAM leaks across the foreign boundary.
+-
