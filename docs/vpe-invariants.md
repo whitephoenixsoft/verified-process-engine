@@ -14,7 +14,7 @@
 
 ## III. Structural & Security Invariants
 1. **Determinism:** Given the same Context and History, the Engine must return the same Verdict.
-2. **Cycle Prevention:** The Compiler must detect and block infinite "Auto-Tick" loops during registration.
+2. **Cycle Prevention:** The Compiler must detect and block infinite "Auto-Tick" loops during registration.  A Directed Graph may contain cycles, but the subgraph formed by edges where action == null must be a Directed Acyclic Graph (DAG).
 3. **Connectivity:** Every Migration 'to_state' must exist as a valid node in the target version's DAG.
 4. **Zero-Trust FFI:** The Host cannot access the Engine's internal Graph; communication is limited to Pointer-based execution calls.
 5. **Type Finality:** A field's DataType (String, Number, Bool) is locked at the Domain Schema level and cannot be changed by the JSON logic.

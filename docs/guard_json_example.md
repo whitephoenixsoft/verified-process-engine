@@ -1,5 +1,7 @@
+```json
 {
   "type": "GreaterThan",
   "path": "rec.order.total_amount",
   "value": 100.0
 }
+```

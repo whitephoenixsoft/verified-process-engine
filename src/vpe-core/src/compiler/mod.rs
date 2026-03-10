@@ -315,4 +315,47 @@ impl VpeCompiler {
 
         Ok(())
     }
+
+    fn check_for_infinite_auto_loops(&self, dag: &VpeDag) -> Result<(), String> {
+        for (start_idx, _) in dag.nodes.iter().enumerate() {
+            let mut visited = HashSet::new();
+            let mut stack = vec![start_idx];
+
+            while let Some(current) = stack.pop() {
+                if !visited.insert(current) {
+                    return Err(format!(
+                        "Infinite Loop Detected: Auto-transitions lead back to state '{}'", 
+                        dag.nodes[current].name
+                    ));
+                }
+
+                // Only follow edges that don't require an external Action
+                for edge in &dag.nodes[current].transitions {
+                    if edge.action == "AUTO_TICK" || edge.action.is_empty() {
+                        stack.push(edge.target_idx);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+    
+    pub fn execute_full(...) {
+        let mut ticks = 0;
+        let max_ticks = 50; // No real-world workflow needs 50 auto-moves in one go
+    
+        loop {
+            match runtime.evaluate(...) {
+                Ok(verdict) => {
+                    // ... update state ...
+                    ticks += 1;
+                    if ticks > max_ticks {
+                        return Err("Runtime Error: Maximum automated transition depth exceeded.");
+                    }
+                }
+                Err(_) => break, // Hit a state requiring an Action
+            }
+        }
+    }
+
 }
