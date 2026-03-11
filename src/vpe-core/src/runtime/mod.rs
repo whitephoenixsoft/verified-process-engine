@@ -53,3 +53,22 @@ impl VpeRuntime {
             action, current_node.name))
     }
 }
+    fn get_validated_start_state(dag: &VpeDag, history: &[VpeEvent]) -> Result<usize, VpeError> {
+        // 1. Get the last 'Transition' event from the chronicle
+        let last_transition = history.iter()
+            .rev()
+            .find(|e| e.event_type == "STATE_TRANSITION");
+
+        match last_transition {
+            Some(event) => {
+                // 2. Cross-reference the state name with the DAG's index
+                dag.get_state_idx(&event.to_state)
+                    .ok_or(VpeError::HistoryCorruption("State in history not in Law".into()))
+            },
+            None => {
+                // 3. No history? Use the initial state of the DAG
+                Ok(dag.initial_state_idx)
+            }
+        }
+    }
+}

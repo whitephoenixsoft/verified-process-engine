@@ -5,7 +5,6 @@
 2. **Read-Only System:** The `sys.` namespace is globally read-only for the Logic Engine. No Transform or Effect can mutate a `sys` variable.
 3. **Write-Access:** Only the `rec.` namespace is mutable during standard transitions.
 4. **Configurability:** Non-system namespaces (`rec`, `ext`, `calc`) must be explicitly defined in a Domain Schema before use.
-5. The VpeRequest should include the sys.version_sequence. if the sequence in the database doesn't match the one the user is acting on, the Host rejects it before it even hits the engine.
 
 ## II. Identifier Invariants
 1. **Format:** Must follow the pattern `namespace.sub_path.key`.
@@ -23,3 +22,6 @@
 ## IV. Data Lineage Invariants
 1. **Traceability:** Every transition and migration must generate an event with a valid TraceID.
 2. **Immutability of History:** The Chronicle (History Events) is a read-only input for Guards; the Engine cannot alter past events.
+
+## V. History State Invariants 
+1. The current_state_idx provided in a VpeRequest must match the to_state of the most recent STATE_TRANSITION event in the history. If history is present and the states do not match, the Engine must return a DesyncError
