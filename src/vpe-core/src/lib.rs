@@ -6,8 +6,27 @@ use serde_json::Value;
 /// The ContextMap is a flat dictionary of namespaced keys
 pub type ContextMap = HashMap<String, Value>;
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum HistoryRequirement {
+    /// Always required for the "Anchor" invariant.
+    LastTransition,
+    /// Needs the most recent event of a specific type (e.g., "Payment_Captured").
+    LastEventOfAction(String),
+    /// Needs all events of a type within a sliding window (e.g., "Login_Failure" last 24h).
+    EventsInWindow { action: String, duration_seconds: u64 },
+    /// Needs the full history of a specific field (rare, but useful for trends).
+    FieldTrajectory(String),
+}
+
 pub trait Guard: Send + Sync {
+    /// The logic check (Runtime)
     fn check(&self, context: &ContextMap, history: &[VpeEvent]) -> bool;
+
+    /// The dependency declaration (Compiler)
+    fn get_requirements(&self) -> Vec<HistoryRequirement> {
+        // Default: Most guards only need the Anchor
+        vec![HistoryRequirement::LastTransition]
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

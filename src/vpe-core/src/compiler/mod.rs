@@ -19,8 +19,6 @@ impl NamespaceCategory {
     }
 }
 
-   
-
 pub enum DataType { String, Number, Bool }
 
 impl DataType {
@@ -94,8 +92,29 @@ pub struct VpeCompiler {
     registry: Arc<GuardRegistry>,
 }
 
+pub struct StateManifest {
+    /// Union of all requirements for all guards in this state.
+    pub required_history: Vec<HistoryRequirement>,
+}
+
 
 impl VpeCompiler {
+    fn build_manifest(state: &RawState) -> StateManifest {
+        let mut requirements = HashSet::new();
+        requirements.insert(HistoryRequirement::LastTransition); // Global Invariant
+    
+        for transition in &state.transitions {
+            for guard in &transition.guards {
+                for req in guard.get_requirements() {
+                    requirements.insert(req);
+                }
+            }
+        }
+        StateManifest { required_history: requirements.into_iter().collect() }
+    }
+
+
+
     //for migrations
     pub fn compile_and_validate(&mut self, json: &str) -> Result<VpeDag, String> {
         let raw: RawVpeJson = serde_json::from_str(json).map_err(|e| e.to_string())?;
@@ -357,5 +376,41 @@ impl VpeCompiler {
             }
         }
     }
+    
+    fn audit_sagas(&self, dag: &VpeDag) -> Result<(), String> {
+        for node in &dag.nodes {
+            for trans in &node.transitions {
+                if trans.has_external_effects() && !dag.is_transient_state(trans.to_idx) {
+                    return Err(format!(
+                        "Safety Violation: Action '{}' has external effects but lands in stable state '{}'. Use a Saga state.",
+                        trans.action, dag.nodes[trans.to_idx].name
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
 
+    //another way audit saga state
+    pub fn audit_side_effects(&self, dag: &VpeDag) -> Result<(), String> {
+        for node in &dag.nodes {
+            for edge in &node.transitions {
+                // If this transition triggers a Side-Effect (EffectCount > 0)
+                if !edge.effects.is_empty() {
+                    let target_node = &dag.nodes[edge.target_idx];
+                    
+                    // CRITICAL CHECK: Target must be transient
+                    if !target_node.is_transient {
+                        return Err(format!(
+                            "Atomicity Risk: Action '{}' has effects but lands in stable state '{}'. \
+                             Target must be marked 'is_transient: true'.",
+                            edge.action, target_node.name
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 }
+

@@ -73,3 +73,28 @@ When 'execute()' is called, the Rust Core follows this sequence:
 - No Manual Overrides: State transitions must only occur via the Engine.
 - Historical Integrity: The Chronicle is immutable; migrations append a 'LiftEvent' rather than rewriting history.
 - Atomic State: The Host must save the State, Context, and SchemaId in a single transaction.
+
+---
+## Summary of the Process V1.1
+
+1. RegisterRegister: You send the JSON. The Compiler checks for loops and builds a Manifest of what history each state needs.
+2. Inquiry: Your .NET app asks the Engine for the Manifest of the current state.
+3. Data Fetch: Your .NET app queries the DB for: LastEvent (The Anchor) + SpecificEvents (from Manifest).
+4. Execute: The Engine verifies the Anchor, runs the guards against the thin history, and gives you a Verdict + a New Event.
+5. Commit: Your .NET app saves the new state and the new event to the DB in one transaction, using the Anchor's ID to ensure no one else moved the record while you were calculating.
+
+---
+
+## Saga Process
+
+1. Phase A: The "Side-Effect" Flag
+In the JSON Law, if a transition involves an external call (e.g., Effect: "Call_Payment_Gateway"), the Compiler flags this transition as Non-Atomic.
+2. Phase B: Compiler Enforcement (The "Saga Guardrail")
+
+### How the "Saga State" Works in the DAG
+Instead of Draft -> Approved, the Law must look like this:
+1. Action: "Submit"
+2. Move to: Pending_External_Verification (The Saga State)
+3. Requirement: This state must have at least two exits:
+    - Success Path: (Triggered by a callback or system event).
+    - Timeout/Failure Path: (Triggered by a sys.now check or a manual "Cancel").

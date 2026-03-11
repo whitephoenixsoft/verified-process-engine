@@ -25,3 +25,23 @@
 
 ## V. History State Invariants 
 1. The current_state_idx provided in a VpeRequest must match the to_state of the most recent STATE_TRANSITION event in the history. If history is present and the states do not match, the Engine must return a DesyncError
+2. The Anchor Rule: Every execution must be accompanied by at least the most recent transition event
+3. The Window Rule: History is only required if a Guard specifically references a past event.
+4. The Conflict Rule: A write is only valid if the parent_event_id of the new event matches the event_id of the anchor provided during execution.
+
+---
+
+# VPE SDK: Added Invariants
+
+## I. The Anchor Invariant
+- **Proof of State:** No transition can be evaluated without the most recent `STATE_TRANSITION` event (The Anchor).
+- **Desync Protection:** If the Anchor's target state does not match the Engine's current node, the Engine must throw a `DesyncError`.
+
+## II. Automated Loop Invariant
+- **The "No-Ouroboros" Rule:** A DAG may have cycles (e.g., Draft -> Review -> Draft), but any cycle consisting entirely of `AUTO_TICK` (action-less) transitions is a fatal compilation error.
+
+## III. Optimistic Concurrency Invariant
+- **The Turn Lock:** The Host must use the Anchor's ID as a "Version Gate" during the database write. A write is only successful if `Record.LastEventID == ProvidedAnchor.ID`.
+
+## IV. Sagas
+- Any transition with an External Effect **MUST** land in a Transient (Saga) state. It cannot land in a Terminal or Stable state directly.

@@ -1,5 +1,7 @@
 # VPE: Verified Process Engine Specification
 
+Note: All the entries are in chronological order. New entries may override old ones.
+
 ## 1. Core Philosophy & Invariants
 
 - Separation of Law and Physics: The Engine (Rust) defines how to execute (Physics), while the Graph (JSON) defines what the rules are (Law).
@@ -195,4 +197,18 @@ The C-ABI layer providing native access for .NET and Java.
 - **Opaque Pointers:** Keeps Rust memory management hidden from the Host.
 - **JSON Marshaling:** Uses JSON strings for complex input (Context/History) to maintain a language-agnostic API.
 - **Memory Handshake:** Provides explicit "Free" functions to prevent RAM leaks across the foreign boundary.
--
+
+
+# VPE SDK: Supplemental Specs (v1.1)
+
+## Guard Interface (Enhanced)
+- **get_requirements():** Every Guard now returns a list of `HistoryRequirement`.
+- **Static Declaration:** Requirements are declared at registration, allowing the Compiler to map out data needs before any record is ever processed.
+
+## Compiler Module (The Manifest Pass)
+- **State Manifests:** For every State in the DAG, the Compiler aggregates the "Union" of all Guard requirements.
+- **Auto-Loop Audit:** Distinguishes between 'Manual' (Action-based) and 'Auto' (Action-less) transitions. It strictly forbids circular paths in the Auto-Transition subgraph.
+
+## Runtime Module (The Atomic Handshake)
+- **Anchor Validation:** The Runtime now enforces that the `to_state` of the last event in the provided history matches the engine's `current_state`.
+- **Turn-based ID:** Every execution produces a unique "Turn ID." All events generated in one "Execute" call share this ID to ensure atomic writes in the Host database.
