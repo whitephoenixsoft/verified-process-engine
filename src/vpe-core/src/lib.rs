@@ -16,6 +16,8 @@ pub enum HistoryRequirement {
     EventsInWindow { action: String, duration_seconds: u64 },
     /// Needs the full history of a specific field (rare, but useful for trends).
     FieldTrajectory(String),
+    /// Needs the current field schema field defined (e.g, "sys.now")
+    FieldDependency(String),
 }
 
 pub trait Guard: Send + Sync {

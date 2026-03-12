@@ -14,6 +14,12 @@ impl Guard for EqualsGuard {
             .map(|val| val == &self.expected)
             .unwrap_or(false)
     }
+
+    fn get_requirements(&self) -> Vec<HistoryRequirement> {
+        vec![
+            HistoryRequirement::FieldDependency(path), // Needs to host to feed it a specific schema value specified in the JSON
+        ] 
+    }
 }
 
 

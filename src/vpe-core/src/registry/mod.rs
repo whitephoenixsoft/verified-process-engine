@@ -23,9 +23,20 @@ impl GuardRegistry {
         let mut registry = Self { factories: HahMap::new() };
 
         registry.register("Equals", |params| { 
-            let path = params["path"].as_str().ok_or("Missing path")?.to_string();
+            let path = params["path"].as_str().ok_or("Equals Guard is missing JSON field: path")?.to_string();
             let expected = Value::from_json(params["value"].clone());
             Ok(Box::new(EqualsGuard { path, expected }))
+        });
+
+        registry.register("OccurredWithin", |params| { 
+            let target_action = params["target_action"].as_str().ok_or("OcurredWithing Guard is missing JSON field: target_action")?.to_string();
+            let window_seconds = params["window_seconds"].as_u64().ok_or("OcurredWithing Guard is missing JSON field: window_seconds")?;
+            Ok(Box::new(OccurredWithinGuard { target_action, window_seconds }))
+        });
+
+        registry.register("TimeElapsed", |params| { 
+            let seconds = params["seconds"].as_u64().ok_or("TimeElapsed Guard is missing JSON field: seconds")?;
+            Ok(Box::new(TimeElapsedGuard { seconds }))
         });
 
         registry

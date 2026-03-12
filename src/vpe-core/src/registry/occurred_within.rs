@@ -24,4 +24,8 @@ impl Guard for OccurredWithinGuard {
             (now - event.timestamp) <= self.window_seconds
         })
     }
+
+    fn get_requirements(&self) -> Vec<HistoryRequirement> {
+        vec![HistoryRequirement::LastEventOfAction(self.target_action)]
+    }
 }

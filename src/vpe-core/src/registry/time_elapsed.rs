@@ -15,6 +15,9 @@ impl Guard for TimeElapsedGuard {
     }
 
     fn get_requirements(&self) -> Vec<HistoryRequirement> {
-        vec![HistoryRequirement::LastTransition] // Only needs the Anchor!
+        vec![
+            HistoryRequirement::LastTransition, // Needs the last transaction to compare with it 
+            HistoryRequirement::FieldDependency("sys.now"), // Needs to host to feed it the UTC clock time
+        ] 
     }
 }
