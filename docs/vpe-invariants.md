@@ -1,52 +1,82 @@
-# VPE SDK: System Invariants
+# Verified Process Engine (VPE) Invariants
+Version: Canonical v1
 
-## I. Namespace Invariants
-1. **Reserved Categories:** Every path must start with a reserved prefix: `sys`, `rec`, `ext`, or `calc`.
-2. **Read-Only System:** The `sys.` namespace is globally read-only for the Logic Engine. No Transform or Effect can mutate a `sys` variable.
-3. **Write-Access:** Only the `rec.` namespace is mutable during standard transitions.
-4. **Configurability:** Non-system namespaces (`rec`, `ext`, `calc`) must be explicitly defined in a Domain Schema before use.
+## 1. Determinism Invariants
+1. VPE execution is a pure function of explicit inputs only.
+2. Given the same compiled process, request, context, and chronicle slice, VPE must produce the same verdict.
+3. VPE must not read ambient wall-clock time, global mutable state, randomness, or external services during evaluation.
+4. Any `sys.*` value must be explicitly provided or derived from provided inputs.
 
-## II. Identifier Invariants
-1. **Format:** Must follow the pattern `namespace.sub_path.key`.
-2. **Character Set:** Only alphanumeric characters and underscores are allowed.
-3. **Leading Digits:** Segments cannot start with a number.
-4. **Case Sensitivity:** All identifiers are case-sensitive to ensure cross-platform consistency.
+## 2. History and State Invariants
+1. The Chronicle is the source of truth.
+2. Current state is derivative and must be provable from history.
+3. Every execution must include the latest transition event (Anchor).
+4. If the Anchor’s `state_after` does not match the requested current state, execution must fail.
+5. History is immutable.
+6. Migrations append events and never rewrite history.
 
-## III. Structural & Security Invariants
-1. **Determinism:** Given the same Context and History, the Engine must return the same Verdict.
-2. **Cycle Prevention:** The Compiler must detect and block infinite "Auto-Tick" loops during registration.  A Directed Graph may contain cycles, but the subgraph formed by edges where action == null must be a Directed Acyclic Graph (DAG).
-3. **Connectivity:** Every Migration 'to_state' must exist as a valid node in the target version's DAG.
-4. **Zero-Trust FFI:** The Host cannot access the Engine's internal Graph; communication is limited to Pointer-based execution calls.
-5. **Type Finality:** A field's DataType (String, Number, Bool) is locked at the Domain Schema level and cannot be changed by the JSON logic.
+## 3. Law and Compilation Invariants
+1. A Law is declarative and versioned.
+2. The Compiler must reject invalid laws at compile time.
+3. All states, transitions, guards, effects, and paths must resolve during compilation.
+4. The Compiler must reject illegal auto-transition cycles.
+5. The Compiler must enforce side-effect safety rules.
+6. The Compiler must emit per-state manifests of data requirements.
 
-## IV. Data Lineage Invariants
-1. **Traceability:** Every transition and migration must generate an event with a valid TraceID.
-2. **Immutability of History:** The Chronicle (History Events) is a read-only input for Guards; the Engine cannot alter past events.
+## 4. Runtime Invariants
+1. Runtime execution is state-machine-based.
+2. Evaluation occurs against one state and one action.
+3. Transitions are evaluated in deterministic priority order.
+4. Guards are evaluated with implicit AND semantics.
+5. First matching transition wins.
+6. Runtime produces a Verdict and performs no side effects.
 
-## V. History State Invariants 
-1. The current_state_idx provided in a VpeRequest must match the to_state of the most recent STATE_TRANSITION event in the history. If history is present and the states do not match, the Engine must return a DesyncError
-2. The Anchor Rule: Every execution must be accompanied by at least the most recent transition event
-3. The Window Rule: History is only required if a Guard specifically references a past event.
-4. The Conflict Rule: A write is only valid if the parent_event_id of the new event matches the event_id of the anchor provided during execution.
+## 5. Namespace Invariants
+1. Allowed namespaces: `sys.*`, `rec.*`, `ext.*`, `calc.*`.
+2. `sys.*` is read-only.
+3. Only `rec.*` may be mutated by transitions or migrations.
+4. `ext.*` is read-only input.
+5. `calc.*` is derived and non-authoritative unless persisted externally.
 
----
+## 6. Identifier and Schema Invariants
+1. All paths must use dot notation.
+2. Segments must be alphanumeric or underscore.
+3. Segments may not start with digits.
+4. Field types are defined by Domain Schema and are immutable per version.
+5. All referenced fields must exist in the schema.
+6. All operations must be type-safe.
 
-# VPE SDK: Added Invariants
+## 7. Auto-Transition Invariants
+1. Auto transitions use action `AUTO_TICK`.
+2. The `AUTO_TICK` subgraph must be acyclic.
+3. Runtime auto-evaluation must have bounded depth.
 
-## I. The Anchor Invariant
-- **Proof of State:** No transition can be evaluated without the most recent `STATE_TRANSITION` event (The Anchor).
-- **Desync Protection:** If the Anchor's target state does not match the Engine's current node, the Engine must throw a `DesyncError`.
+## 8. Saga and Side-Effect Invariants
+1. Transitions with effects are non-atomic.
+2. Such transitions must land in transient states.
+3. Transient states must define a timeout exit.
+4. Runtime emits effects; host executes them.
 
-## II. Automated Loop Invariant
-- **The "No-Ouroboros" Rule:** A DAG may have cycles (e.g., Draft -> Review -> Draft), but any cycle consisting entirely of `AUTO_TICK` (action-less) transitions is a fatal compilation error.
+## 9. Migration Invariants
+1. Migration is lazy and deterministic.
+2. Migration rules are evaluated in defined order.
+3. Transforms may not write to `sys.*`.
+4. Migration produces an appended event.
 
-## III. Optimistic Concurrency Invariant
-- **The Turn Lock:** The Host must use the Anchor's ID as a "Version Gate" during the database write. A write is only successful if `Record.LastEventID == ProvidedAnchor.ID`.
+## 10. Interop Invariants
+1. FFI is zero-trust.
+2. Internal structures are not exposed.
+3. JSON is used for cross-language data exchange.
+4. All allocated memory crossing FFI must be explicitly freed.
+5. No panics may cross FFI boundaries.
 
-## IV. Sagas
-- Any transition with an External Effect **MUST** land in a Transient (Saga) state. It cannot land in a Terminal or Stable state directly.
+## 11. Concurrency Invariants
+1. State and events must be persisted atomically.
+2. Writes must be based on Anchor identity.
+3. New events must reference the Anchor.
 
-## V. Verdicts
-- Invariant: Traceability. Every transformation must be included in the state_patch of the return verdict.
-- Invariant: Parameterization. Effects are no longer just signals; they are data-carrying envelopes.
-- Invariant: Atomic Commitment. The Host must save the state_patch and the next_state in the same database transaction.
+## 12. Simulation Invariants
+1. Simulation replays history incrementally (prefix-based).
+2. Simulation uses event timestamps as time source.
+3. Simulation does not execute effects.
+4. Simulation produces classified outcomes.
