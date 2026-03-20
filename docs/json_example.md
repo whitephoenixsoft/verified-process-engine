@@ -1,5 +1,55 @@
 ```json
 {
+  "domain": "OrderManagement",
+  "version": "2.0.0",
+  "supersedes": ["1.0.0", "1.1.0"],
+  "initial_state": "Draft",
+
+  "migration_rules": [
+    {
+      "from_state": "Pending",
+      "to_state": "AwaitingTaxInfo",
+      "guards": [{ "type": "MissingField", "path": "entity.TaxID" }],
+      "transforms": [
+        { "target": "entity.LegacyMode", "value": true }
+      ]
+    }
+  ],
+
+  "states": [
+    {
+      "name": "AwaitingPayment",
+      "transitions": [
+        {
+          "action": "SubmitPayment",
+          "to": "Processing",
+          "priority": 1,
+          "guards": [
+            { 
+              "type": "OccurredWithin", 
+              "target_action": "CardValidation", 
+              "window_seconds": 3600 
+            }
+          ],
+          "effects": [
+            {
+              "type": "CrossDomain",
+              "target": "Accounting",
+              "action": "Debit",
+              "on_success": "Confirm",
+              "on_failure": "Reject",
+              "on_timeout": "HandleStale"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+```json
+{
   "process": "LoanApproval",
   "version": "2.1.0",
   "initial_state": "Draft",
@@ -51,4 +101,16 @@
     }
   ]
 }
+```
+
+```json
+"effects": [
+  {
+    "type": "WebHook",
+    "params": {
+      "url": "https://api.partner.com/notify",
+      "payload_field": "rec.order_id"
+    }
+  }
+]
 ```

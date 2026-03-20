@@ -1,23 +1,5 @@
-
-#[derive(Debug, PartialEq)]
-pub enum NamespaceCategory {
-    System,   // sys.* (Hardcoded logic)
-    Record,   // rec.* (Dynamic schema)
-    External, // ext.* (Dynamic schema)
-    Calc,     // calc.* (Dynamic schema)
-}
-
-impl NamespaceCategory {
-    fn from_prefix(prefix: &str) -> Result<Self, String> {
-        match prefix {
-            "sys"  => Ok(NamespaceCategory::System),
-            "rec"  => Ok(NamespaceCategory::Record),
-            "ext"  => Ok(NamespaceCategory::External),
-            "calc" => Ok(NamespaceCategory::Calc),
-            _      => Err(format!("Unknown namespace prefix: '{}'", prefix)),
-        }
-    }
-}
+pub mod domain;
+pub mod namespace;
 
 pub enum DataType { String, Number, Bool }
 
@@ -40,34 +22,6 @@ impl DataType {
     }
 }
 
-pub struct DomainSchema {
-    pub name: String,
-    // We only store definitions for non-system namespaces
-    pub registry: HashMap<NamespaceCategory, HashMap<String, DataType>>,
-}
-
-impl DomainSchema {
-    pub fn new(name: &str) -> Self {
-        Self {
-            name: name.to_string(),
-            registry: HashMap::new(),
-        }
-    }
-
-    pub fn add_definition(&mut self, category: NamespaceCategory, field: &str, dtype: DataType) -> Result<(), String> {
-        if category == NamespaceCategory::System {
-            return Err("Cannot add custom fields to the 'sys' namespace.".into());
-        }
-        
-        self.registry
-            .entry(category)
-            .or_insert_with(HashMap::new())
-            .insert(field.to_string(), dtype);
-        Ok(())
-    }
-}
-
-
 pub struct VpeDag {
     pub domain: String,
     pub version: String,
@@ -88,17 +42,142 @@ pub struct Edge {
     pub effects: Vec<String>,
 }
 
-pub struct VpeCompiler {
-    registry: Arc<GuardRegistry>,
-}
-
 pub struct StateManifest {
     /// Union of all requirements for all guards in this state.
     pub required_history: Vec<HistoryRequirement>,
 }
 
+use std::collections::{HashMap, HashSet, VecDeque};
+use sha2::{Sha256, Digest};
 
-impl VpeCompiler {
+pub struct VpeCompiler<'a> {
+    registry: Arc<GuardRegistry>,
+    schema: &'a SchemaDefinition,
+}
+
+impl<'a> VpeCompiler<'a> {
+    pub fn new(registry: Arc<GuardRegistry>, schema: &'a SchemaDefinition) -> Self {
+        Self { registry, schema }
+    }
+
+    pub fn compile_and_validate(&self, json: &str) -> Result<RegistrationReport, VpeError> {
+        // 1. PHASE 1: Ingestion (Parse & Bind to Schema)
+        let raw_dag: RawDag = serde_json::from_str(json).map_err(VpeError::ParseError)?;
+        self.validate_schema_binding(&raw_dag)?;
+
+        // 2. PHASE 2 & 3: Build Internal DAG & Audit Topology
+        let dag = self.build_dag(raw_dag)?;
+        self.audit_topology(&dag)?;
+
+        // 3. PHASE 4: Saga & Side-Effect Safety
+        self.audit_sagas(&dag)?;
+
+        // 4. PHASE 5: Manifest Synthesis
+        let manifests = self.synthesize_manifests(&dag);
+
+        // 5. GENERATE DIGEST (Hash of the DAG structure)
+        let digest = self.calculate_digest(&dag);
+
+        Ok(RegistrationReport {
+            domain: dag.domain.clone(),
+            version: dag.version.clone(),
+            digest,
+            manifests,
+            warnings: vec![], // Add warnings gathered during passes
+        })
+    }
+
+    /// PHASE 2: Check for Orphans and Auto-Loops
+    fn audit_topology(&self, dag: &VpeDag) -> Result<(), VpeError> {
+        let mut visited = HashSet::new();
+        let mut queue = VecDeque::new();
+        queue.push_back(dag.initial_state_idx);
+
+        // Reachability (Orphan Check)
+        while let Some(idx) = queue.pop_front() {
+            if visited.insert(idx) {
+                for transition in &dag.nodes[idx].transitions {
+                    queue.push_back(transition.target_idx);
+                }
+            }
+        }
+
+        if visited.len() < dag.nodes.len() {
+            return Err(VpeError::CompilerError("Orphan states detected.".into()));
+        }
+
+        // Auto-Loop Detection (DFS for back-edges on null actions)
+        self.check_for_auto_cycles(dag)
+    }
+
+    fn check_for_auto_cycles(&self, dag: &VpeDag) -> Result<(), VpeError> {
+        for start_node in 0..dag.nodes.len() {
+            let mut stack = vec![(start_node, HashSet::new())];
+            while let Some((current, mut path)) = stack.pop() {
+                if !path.insert(current) {
+                    return Err(VpeError::CompilerError(format!(
+                        "Infinite Auto-Loop in state: {}", dag.nodes[current].name
+                    )));
+                }
+
+                for edge in &dag.nodes[current].transitions {
+                    if edge.action.is_none() { // Only follow AUTO_TICK paths
+                        stack.push((edge.target_idx, path.clone()));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// PHASE 4: Saga Audit
+    fn audit_sagas(&self, dag: &VpeDag) -> Result<(), VpeError> {
+        for node in &dag.nodes {
+            for edge in &node.transitions {
+                if !edge.effects.is_empty() {
+                    let target = &dag.nodes[edge.target_idx];
+                    if !target.is_transient {
+                        return Err(VpeError::CompilerError(format!(
+                            "Action '{}' has side-effects but lands in stable state '{}'",
+                            edge.action.as_deref().unwrap_or("auto"), target.name
+                        )));
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// PHASE 5: Manifest Synthesis
+    fn synthesize_manifests(&self, dag: &VpeDag) -> HashMap<String, Vec<HistoryRequirement>> {
+        let mut report = HashMap::new();
+
+        for node in &dag.nodes {
+            let mut reqs = HashSet::new();
+            reqs.insert(HistoryRequirement::LastTransition); // Always required
+
+            for trans in &node.transitions {
+                for guard_def in &trans.guards {
+                    // Pull hints from the Registry
+                    if let Some(guard) = self.registry.get(&guard_def.guard_type) {
+                        for req in guard.get_requirements() {
+                            reqs.insert(req);
+                        }
+                    }
+                }
+            }
+            report.insert(node.name.clone(), reqs.into_iter().collect());
+        }
+        report
+    }
+
+    fn calculate_digest(&self, dag: &VpeDag) -> String {
+        let mut hasher = Sha256::new();
+        // Hash the serialized DAG structure to ensure logic changes trigger a new hash
+        hasher.update(serde_json::to_string(dag).unwrap());
+        format!("{:x}", hasher.finalize())
+    }
+
     fn build_manifest(state: &RawState) -> StateManifest {
         let mut requirements = HashSet::new();
         requirements.insert(HistoryRequirement::LastTransition); // Global Invariant
@@ -112,9 +191,7 @@ impl VpeCompiler {
         }
         StateManifest { required_history: requirements.into_iter().collect() }
     }
-
-
-
+    
     //for migrations
     pub fn compile_and_validate(&mut self, json: &str) -> Result<VpeDag, String> {
         let raw: RawVpeJson = serde_json::from_str(json).map_err(|e| e.to_string())?;
@@ -412,5 +489,41 @@ impl VpeCompiler {
         }
         Ok(())
     }
-}
 
+    //uses schema definitions
+    fn validate_guard_types(&self, guard_def: &RawGuard) -> Result<(), VpeError> {
+        if guard_def.path.starts_with("rec.") {
+            let expected_type = self.schema.resolve_rec_type(&guard_def.path)
+                .ok_or(VpeError::CompilerError(format!(
+                    "Field '{}' not found in Domain Schema", guard_def.path
+                )))?;
+
+            // Simple type matching logic
+            match (expected_type, &guard_def.value) {
+                (VpeType::Number, Value::Number(_)) => Ok(()),
+                (VpeType::String, Value::String(_)) => Ok(()),
+                (VpeType::Boolean, Value::Bool(_)) => Ok(()),
+                _ => Err(VpeError::CompilerError(format!(
+                    "Type mismatch for field '{}'. Expected {:?}.", 
+                    guard_def.path, expected_type
+                ))),
+            }
+        } else {
+            // Handle sys.* and ext.* with internal engine defaults
+            Ok(())
+        }
+    }
+    
+    // date vs duration 
+    fn validate_temporal_comparison(&self, path: &str, value: &VpeValue) -> Result<(), VpeError> {
+        let field_type = self.schema.resolve_rec_type(path)
+            .ok_or(VpeError::FieldNotFound(path.to_string()))?;
+
+        match (field_type, value) {
+            (VpeType::DateTime, VpeValue::DateTime(_)) => Ok(()),
+            (VpeType::DateTime, VpeValue::SysPlaceholder(s)) if s == "sys.now" => Ok(()),
+            (VpeType::DateTime, _) => Err(VpeError::TypeMismatch("DateTime fields must be compared to DateTimes or sys.now".into())),
+            _ => Ok(()),
+        }
+    }
+}

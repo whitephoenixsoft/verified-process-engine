@@ -45,3 +45,8 @@
 
 ## IV. Sagas
 - Any transition with an External Effect **MUST** land in a Transient (Saga) state. It cannot land in a Terminal or Stable state directly.
+
+## V. Verdicts
+- Invariant: Traceability. Every transformation must be included in the state_patch of the return verdict.
+- Invariant: Parameterization. Effects are no longer just signals; they are data-carrying envelopes.
+- Invariant: Atomic Commitment. The Host must save the state_patch and the next_state in the same database transaction.

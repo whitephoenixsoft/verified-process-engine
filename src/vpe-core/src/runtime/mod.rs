@@ -6,11 +6,14 @@ pub struct VpeVerdict {
     pub effects: Vec<VpeEffect>,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct VpeEffect {
     pub effect_type: String,
     pub target: String,
     pub payload: serde_json::Value,
+    pub parameters: HashMap<String, VpeValue>, // e.g., { "user_id": 123, "template": "welcome" }
 }
+
 
 impl VpeRuntime {
     pub fn evaluate(

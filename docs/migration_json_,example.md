@@ -40,3 +40,18 @@
   ]
 }
 ```
+
+```json
+"transformations": [
+  { "op": "Set", "path": "rec.status", "value": "Approved" }
+],
+"effects": [
+  {
+    "type": "WebHook",
+    "params": {
+      "url": "https://api.partner.com/notify",
+      "payload_field": "rec.order_id"
+    }
+  }
+]
+```
