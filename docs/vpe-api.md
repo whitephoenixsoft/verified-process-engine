@@ -1,5 +1,5 @@
 # VPE Public Rust API
-Version: Canonical Draft v1
+Version: Canonical Draft v1.1
 
 ## Purpose
 This document defines the intended public Rust API for the Verified Process Engine (VPE). It is written from the perspective of an application developer embedding VPE as a library.
@@ -10,12 +10,14 @@ VPE is designed to be:
 - embeddable
 - host-owned for I/O, persistence, and side effects
 - usable as a stable business-logic boundary
+- usable both at design time (compile/validate) and runtime (execute)
 
 ## Design Goals
 The public API should:
 - make one engine turn feel natural
 - expose extension points without leaking internals
 - support web applications, event-sourced systems, and workflow/orchestration hosts
+- support design-time validation and compilation
 - avoid forcing FFI-shaped compromises onto Rust users
 
 The public API should not expose:
@@ -30,6 +32,7 @@ The user-facing crate is `vpe`.
 Suggested public modules:
 - `prelude`
 - `engine`
+- `compiler`
 - `registry`
 - `schema`
 - `types`
@@ -99,6 +102,7 @@ Contains:
 Purpose:
 - makes the anchor explicit
 - lets the host supply only the required history
+- provides the proof of current state
 
 ### VpeRequest
 The public unit of execution.
@@ -130,6 +134,21 @@ Purpose:
 - lets VPE emit orchestration intent
 - lets hosts dispatch effects externally
 
+### PlannedEvent
+Represents a host-persisted event planned by one engine turn.
+
+Suggested fields:
+- `event_kind`
+- `action`
+- `state_before`
+- `state_after`
+- `metadata`
+
+Purpose:
+- allows host persistence
+- supports event-sourced systems
+- preserves traceability
+
 ### VpeVerdict
 Represents the output of one engine turn.
 
@@ -147,6 +166,7 @@ Purpose:
 - persistence-friendly
 - orchestration-friendly
 - event-store-friendly
+- represents intent, not execution
 
 ### StateManifest
 Describes the data required to evaluate one state.
@@ -157,6 +177,17 @@ Contains:
 
 Purpose:
 - lets the host fetch only the history and fields needed for evaluation
+
+### GuardRequirements
+Describes the total requirements declared by a Guard.
+
+Contains:
+- `history`
+- `context`
+
+Purpose:
+- allows compiler-driven manifest generation
+- keeps data dependencies explicit
 
 ## Public Traits
 
@@ -172,11 +203,17 @@ A Guard must be:
 - stateless after creation
 - deterministic
 - thread-safe
+- side-effect free
 
 A Guard should not:
 - perform I/O
 - read global state
 - mutate external state
+
+Suggested responsibilities:
+- `check(context, history) -> bool`
+- `requirements() -> GuardRequirements`
+- `name() -> &'static str`
 
 ## Registry API
 
@@ -200,6 +237,48 @@ Expected flow:
 Purpose:
 - make startup ergonomic
 - keep runtime immutable and concurrency-safe
+
+## Compiler API
+
+### VpeCompiler
+Public design-time compiler for validation and compilation.
+
+Purpose:
+- support authoring workflows
+- support CI/CD validation
+- support manifest inspection
+- support future CLI tooling
+
+Expected public methods:
+- `validate`
+- `compile`
+
+### validate
+Validates a schema + law combination without storing it in an engine.
+
+Input:
+- schema
+- law
+- registry
+
+Output:
+- `ValidationReport`
+
+### compile
+Compiles a schema + law combination into an in-memory compiled process and report.
+
+Input:
+- schema
+- law
+- registry
+
+Output:
+- `CompilationResult`
+
+Purpose:
+- design-time verification
+- offline or CI use
+- future tooling support
 
 ## Engine API
 
@@ -259,6 +338,11 @@ Confirms registered domain/version.
 ### ValidationReport
 Returns warnings and process identity.
 
+Purpose:
+- design-time validation
+- startup validation
+- CI diagnostics
+
 ### RegistrationReport
 Returns:
 - process identity
@@ -269,7 +353,17 @@ Returns:
 
 Purpose:
 - lets hosts inspect compile outcome
-- supports CI, startup validation, and observability
+- supports startup validation and observability
+
+### CompilationResult
+Returns:
+- compiled process
+- registration report
+
+Purpose:
+- design-time compilation
+- future artifact tooling
+- engine-independent validation path
 
 ## Execution API
 
@@ -296,7 +390,7 @@ Output:
 - `VpeVerdict`
 
 Execution responsibilities:
-- validate anchor
+- validate anchor presence
 - validate current-state consistency
 - resolve candidate transitions
 - evaluate guards in priority order
@@ -375,6 +469,16 @@ Expected structured cases:
 - no transition found
 - unknown state
 
+### Compile Errors
+Expected structured cases:
+- unresolved state
+- unresolved guard/effect type
+- invalid identifier/path
+- schema mismatch
+- type mismatch
+- auto-transition cycle
+- saga safety violation
+
 Public errors should be:
 - non-panicking
 - deterministic
@@ -392,9 +496,11 @@ Suggested feature model:
 The Rust API must remain ergonomic even when FFI is enabled.
 
 ## Public API Principles
-1. One engine call should represent one deterministic turn.
+1. One engine call represents one deterministic turn.
 2. The host owns data loading, persistence, and side effects.
 3. The engine owns policy validation and decisioning.
 4. Public types should be practical to construct and serialize.
 5. Internal optimizations must remain private.
 6. Embedding VPE should reduce business-logic sprawl, not increase ceremony.
+7. Design-time validation and compilation are first-class use cases.
+8. The same logic model must power compile-time validation, runtime execution, and simulation.

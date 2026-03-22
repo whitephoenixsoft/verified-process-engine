@@ -1,87 +1,331 @@
 # VPE: Verified Process Engine
 
-VPE is a high-performance, deterministic logic kernel written in Rust. It treats business processes as "compiled circuits," moving logic out of fragile code and into a verified, versioned, and auditable Directed Acyclic Graph (DAG).
+VPE is a deterministic decision engine written in Rust.  
+It compiles declarative business logic into a verified, high-performance runtime that evaluates decisions as pure functions.
 
+Instead of scattering business rules across services, controllers, and workflows, VPE centralizes them into a versioned, auditable, and replayable system of truth.
 
+---
 
-## 1. The Core Philosophy
-Traditional state machines are "goldfish"—they have no memory and no awareness of the world. VPE evolves this into a Contextual Model:
+## Why VPE?
 
-- Verified: The compiler prevents infinite loops, dead ends, and dangling saga effects at build-time.
-- Stateless Core: A pure-function runtime that accepts a DAG, Current Reality (Context), and History (The Chronicle).
-- Language Agnostic: High-speed FFI bridge for .NET, Go, Python, and more.
+Most systems implement business logic as:
+- nested conditionals
+- duplicated validation rules
+- implicit workflows spread across codebases
 
-## 2. Architecture
-VPE is divided into four distinct layers:
+This leads to:
+- inconsistent behavior
+- hard-to-reason systems
+- fragile migrations
+- poor auditability
 
-- The Law (JSON): Declarative process definitions including guards, branching, and migration rules.
-- The Compiler (Rust): A validation suite that performs topological and temporal analysis to ensure the logic is "safe."
-- The Registry (Opcodes): A library of logic primitives (e.g., GreaterThan, OccurredWithin) mapped to Rust traits.
-- The Runtime (The Pulse): An arena-allocated DAG execution loop optimized for sub-10 microsecond decisions.
+VPE replaces this with:
 
+Logic as a compiled, deterministic system
 
+---
 
-## 3. Minimal API (Rust Internal)
-The Rust engine uses a simple lifecycle: Compile -> Register -> Execute.
+## Core Philosophy
 
-- VpeCompiler::compile(json_string): Validates and returns a VpeDag.
-- VpeRegistry::insert(name, version, dag): Stores the graph.
-- VpeEngine::execute(domain, version, state, action, context, history): The primary execution call.
+### Deterministic by Design
+Every decision is a pure function:
 
-## 4. FFI Bridge (The C Interface)
-Used by .NET/Go to interact with the Rust Kernel across the binary boundary:
+`f(Process, Request) → Verdict`
 
-- void* vpe_init(): Initializes the engine.
-- bool vpe_load_graph(const char* json): Compiles and registers a graph.
-- FfiVerdict* vpe_evaluate_ffi(void* dag_ptr, size_t state_idx, const char* action, ...): Cross-boundary evaluation.
-- void vpe_free_verdict(FfiVerdict* ptr): Explicitly frees Rust-allocated memory.
+Given the same:
+- process definition
+- context
+- history
 
-## 5. The "Law" (JSON Specification)
-VPE supports complex enterprise features like Lazy Migration and Saga Patterns directly in the schema.
+You always get the same result.
 
-```JSON
-{
-  "domain": "OrderManagement",
-  "version": "2.0.0",
-  "supersedes": "1.0.0",
-  "migration_rules": [
-    {
-      "from_state": "Pending",
-      "to_state": "AwaitingTaxInfo",
-      "guards": [{ "type": "MissingField", "path": "entity.TaxID" }]
-    }
-  ],
-  "transitions": [
-    {
-      "action": "Approve",
-      "from": "Pending",
-      "to": "Approved",
-      "priority": 10,
-      "guards": [
-        { "type": "OccurredWithin", "target": "FraudCheck", "window_seconds": 3600 }
-      ],
-      "effects": [
-        { "type": "CrossDomain", "target": "Ledger", "action": "Debit", "on_success": "Confirm" }
-      ]
-    }
-  ]
-}
+---
+
+### History is Truth
+State is not trusted unless it is proven.
+
+VPE evaluates decisions against:
+- Context (current data)
+- Chronicle (event history)
+
+The latest event (the Anchor) is required to prove correctness.
+
+---
+
+### Verified Before Runtime
+VPE does not allow unsafe logic into production.
+
+The compiler enforces:
+- no infinite auto-loops
+- no orphan states
+- no invalid transitions
+- no unsafe side-effect patterns
+
+Errors happen at compile time, not in production.
+
+---
+
+### Stateless Runtime
+The engine:
+- does not mutate data
+- does not perform I/O
+- does not call external systems
+
+It only:
+- evaluates
+- decides
+- emits a Verdict
+
+---
+
+### Host Owns Reality
+Your application remains in control of:
+- persistence
+- external calls
+- workflows
+- APIs
+
+VPE acts as the decision boundary, not the system owner.
+
+---
+
+## How It Works
+
+VPE follows a simple, consistent loop:
+
+1. Define your process ("Law")
+2. Compile and register it
+3. Ask VPE what data it needs (Manifest)
+4. Provide context + history
+5. Execute one decision
+6. Persist results and execute effects
+
+---
+
+## Architecture
+
+VPE is composed of four primary layers:
+
+### The Law
+A declarative definition of:
+- states
+- transitions
+- guards (conditions)
+- effects (intent)
+
+Typically defined in JSON.
+
+---
+
+### The Compiler
+A validation and transformation pipeline that:
+- enforces invariants
+- resolves all references
+- builds an optimized graph
+- generates manifests
+
+---
+
+### The Registry
+A mapping between:
+- string identifiers in the Law
+- Rust implementations (Guards)
+
+This allows extension without changing the engine.
+
+---
+
+### The Runtime
+A high-performance evaluator that:
+- executes one state + action
+- evaluates guards in priority order
+- returns a deterministic Verdict
+
+---
+
+## Example (Rust)
+
+```rust
+use vpe::prelude::*;
+
+// Build engine
+let registry = GuardRegistry::builder()
+    .with_builtins()
+    .build()?;
+
+let engine = VpeEngine::builder()
+    .with_registry(registry)
+    .build()?;
+
+// Register schema + process
+engine.register_schema_json(schema_json)?;
+engine.register_process_json(law_json)?;
+
+// Ask what data is needed
+let process = ProcessRef::new("Lending", "LoanApproval", "2.1.0");
+let manifest = engine.manifest(&process, "Submitted")?;
+
+// Load required history + context (host responsibility)
+let chronicle = load_history(&manifest)?;
+let context = build_context();
+
+// Execute one deterministic turn
+let verdict = engine.execute(VpeRequest {
+    process,
+    trace_id: "trace-123".into(),
+    now: 1_710_000_000,
+    current_state: "Submitted".into(),
+    action: "Evaluate".into(),
+    context,
+    chronicle,
+})?;
+
+// Host persists + executes effects
+persist(verdict)?;
+dispatch(verdict.effects)?;
 ```
+---
 
-## 6. Safety & Invariants
-- Deterministic Replay: Given the same history and context, the verdict is always the same.
-- Cycle Detection: The compiler refuses to build automated "infinite loops."
-- Saga Completeness: If an action triggers a cross-domain effect, the compiler ensures Success, Failure, and Timeout handlers exist.
-- Lazy Lifting: Records are upgraded to the latest "Law" only when touched, using the defined migration rules.
+## The Verdict
 
-## 7. Performance
-VPE is built for high-throughput environments:
+Every execution returns a structured result:
 
-- Evaluation Time: Under 10 microseconds per decision.
-- Memory Layout: Arena-allocated nodes with index-based navigation (no pointer chasing).
-- Context: Flat, namespaced HashMaps for O(1) property access.
+- next state
+- effects (intent only)
+- emitted events
+- state changes
 
+VPE does not execute effects.  
+It tells you what should happen — your system decides how.
 
+---
 
-## 8. License
-Licensed under Apache 2.0.
+## Key Concepts
+
+### Context
+A flat map of inputs:
+
+- rec.* → record data
+- ext.* → external inputs
+- sys.* → system values (e.g., time)
+
+---
+
+### Chronicle
+A slice of history used for evaluation.
+
+Includes:
+- the latest event (Anchor)
+- relevant past events
+
+---
+
+### Manifest
+Generated at compile time.
+
+Defines exactly what data is required:
+- which history events
+- which context fields
+
+This enables:
+- minimal data loading
+- predictable performance
+
+---
+
+### Guards
+Reusable logic primitives implemented in Rust.
+
+Examples:
+- Equals
+- GreaterThan
+- OccurredWithin (temporal logic)
+
+---
+
+### Effects
+Structured instructions emitted by VPE:
+
+- send email
+- call service
+- enqueue job
+
+Handled entirely by the host.
+
+---
+
+## Features
+
+### Deterministic Execution
+Replay decisions exactly across time and environments.
+
+### Compile-Time Safety
+Invalid logic never reaches runtime.
+
+### Temporal Logic
+Reason over history:
+- "3 attempts in 24 hours"
+- "event occurred recently"
+
+### Lazy Migration
+Upgrade records between versions only when touched.
+
+### Saga Safety
+Enforces:
+- success paths
+- failure paths
+- timeout handling
+
+---
+
+## Performance
+
+Designed for high-throughput systems:
+
+- Sub-microsecond to low-microsecond evaluation
+- Index-based graph traversal (no string lookups)
+- Minimal allocations at runtime
+- Manifest-driven data access
+
+---
+
+## Use Cases
+
+VPE fits naturally into:
+
+- Web application backends
+- Event-sourced systems
+- Workflow orchestration
+- Microservice coordination
+- Decision engines / rule systems
+
+---
+
+## FFI Support
+
+VPE can be used outside Rust via a C-compatible interface:
+
+- .NET
+- Go
+- Python
+- others
+
+The Rust library remains the primary implementation.  
+FFI is a thin interoperability layer.
+
+---
+
+## Design Principles
+
+- Deterministic over clever
+- Explicit over implicit
+- Verified over assumed
+- Host-controlled side effects
+- Replayability as a first-class feature
+
+---
+
+## License
+
+Apache 2.0
