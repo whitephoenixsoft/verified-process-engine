@@ -6,6 +6,11 @@ It compiles declarative business logic into a verified, high-performance runtime
 Instead of scattering business rules across services, controllers, and workflows, VPE centralizes them into a versioned, auditable, and replayable system of truth.
 
 ---
+## Status
+
+EARLY DEVELOPMENT 
+
+---
 
 ## Why VPE?
 
@@ -46,7 +51,7 @@ It answers one question, extremely well:
 ### Deterministic by Design
 Every decision is a pure function:
 
-f(Process, Request) → Verdict
+`f(Process, Request) → Verdict`
 
 Given the same:
 - process definition
@@ -181,6 +186,7 @@ A high-performance evaluator that:
 
 ## Example (Rust)
 
+```rust
 use vpe::prelude::*;
 
 // Build engine
@@ -218,7 +224,7 @@ let verdict = engine.execute(VpeRequest {
 // Host persists + executes effects
 persist(verdict)?;
 dispatch(verdict.effects)?;
-
+```
 ---
 
 ## The Verdict
@@ -349,9 +355,10 @@ VPE includes a CLI for:
 
 Example:
 
+```sh
 vpe validate --schema schema.json --law law.json  
 vpe execute --schema schema.json --law law.json --request request.json  
-
+```
 The CLI is:
 - JSON-first
 - deterministic
