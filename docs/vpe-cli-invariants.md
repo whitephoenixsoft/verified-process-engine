@@ -1,17 +1,21 @@
 # VPE CLI Invariants
-Version: Canonical v1
+Version: Canonical v1.1
 
 ## 1. Purpose Invariants
 1. The CLI is a first-class delivery surface for VPE.
 2. The CLI is a thin harness over the Rust library APIs.
 3. The CLI must not implement separate business logic from the Rust library.
 4. The CLI exists to support design-time validation, compilation, execution, simulation, and migration workflows.
+5. The CLI may exist in two forms:
+   - official portable CLI
+   - custom project-specific CLI harness
 
 ## 2. Layering Invariants
 1. The Rust library is the canonical implementation of VPE semantics.
 2. The CLI must call the same compiler, runtime, simulation, and migration APIs exposed by the Rust library.
 3. The CLI must not bypass compiler, runtime, or engine invariants.
 4. The CLI must not introduce behavior that differs from the Rust API for the same inputs.
+5. The CLI must not duplicate VPE logic that already exists in the Rust library.
 
 ## 3. Determinism Invariants
 1. Given the same CLI inputs, the CLI must produce the same outputs.
@@ -104,7 +108,23 @@ Version: Canonical v1
 3. The CLI must not become the only supported access path to VPE features.
 4. The CLI must strengthen the ecosystem around the Rust library, not replace it.
 
-## 16. Product Invariants
+## 16. Custom Guard Invariants
+1. The official portable CLI guarantees full support for built-in guards only.
+2. Custom guards are supported only when they are registered in the running CLI executable.
+3. Unknown custom guards must be treated as an error by default.
+4. The CLI must not silently skip, stub, or reinterpret unknown guards unless an explicit non-default mode is introduced in the future.
+5. A custom CLI harness may register built-in guards and project-specific custom guards together.
+6. Custom guard support in a CLI must use the same GuardRegistry model as the Rust library.
+7. No runtime plugin or scripting system is required for CLI custom guard support in v1.
+
+## 17. Custom CLI Harness Invariants
+1. A project may build its own CLI harness on top of shared CLI command logic.
+2. A custom CLI harness must remain thin over the Rust library.
+3. A custom CLI harness must not fork or redefine VPE semantics.
+4. A custom CLI harness may provide a dedicated source folder or module for project-specific guards.
+5. The official CLI and custom CLI harnesses must share the same command semantics where features overlap.
+
+## 18. Product Invariants
 1. The CLI is part of the VPE product, not an afterthought.
 2. The CLI should function as a harness for:
    - authoring

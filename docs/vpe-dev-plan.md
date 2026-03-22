@@ -1,5 +1,5 @@
 # VPE Development Sequencing Plan
-Version: Canonical v1
+Version: Canonical v1.1
 
 ## 1. Purpose
 
@@ -23,24 +23,28 @@ VPE will be built as:
 - one CLI built in sync as the first real consumer
 - one FFI layer added after core semantics stabilize
 
-The CLI is not a separate implementation.
+The CLI is not a separate implementation.  
 The CLI is a thin harness over the Rust library.
 
-The FFI is not a separate implementation.
+The FFI is not a separate implementation.  
 The FFI is a thin interoperability layer over the Rust library.
+
+The **Compiler and Runtime are the core execution model**.  
+The Engine is an orchestration layer built on top of them.
 
 ---
 
 ## 3. Delivery Surfaces
 
-### Layer 1: Rust Library
+### Layer 1: Rust Library (Canonical Core)
 The canonical implementation of:
 - types
 - schema
 - registry
-- compiler
-- runtime
-- engine facade
+- compiler (design-time)
+- runtime (execution)
+- application layer (request orchestration)
+- engine facade (optional orchestration)
 - compiled process
 - simulation
 - migration
@@ -49,7 +53,27 @@ This layer defines all semantics.
 
 ---
 
+### Layer 1.5: Application Layer (New)
+
+A thin internal layer shared by CLI, Engine, and FFI.
+
+Responsibilities:
+- request normalization
+- input validation (pre-runtime)
+- orchestration of:
+  - compile → runtime
+  - manifest → data validation
+- consistent error shaping
+
+This layer:
+- prevents duplication across CLI, Engine, and FFI
+- is not exposed as a separate product surface
+- must remain thin and deterministic
+
+---
+
 ### Layer 2: CLI
+
 The first operational harness for:
 - validate
 - compile
@@ -64,11 +88,15 @@ The CLI exists to:
 - support CI/CD
 - act as a debugging and experimentation harness
 
-The CLI must remain thin and call the Rust library only.
+The CLI must:
+- remain thin
+- call the application layer + library
+- not duplicate logic
 
 ---
 
 ### Layer 3: FFI
+
 The interoperability surface for:
 - .NET
 - Go
@@ -86,9 +114,11 @@ The FFI must be added only after:
 
 Implementation order is:
 
-1. Rust library core
-2. CLI in sync with core
-3. FFI after semantics stabilize
+1. Core library (compiler + runtime + registry)
+2. CLI in sync with core (early)
+3. Application layer stabilization
+4. Simulation & migration
+5. FFI after semantics stabilize
 
 This order is locked unless explicitly revised.
 
@@ -104,25 +134,28 @@ For each feature slice:
 4. Use the CLI as the first usability test
 5. Refine the library only if the CLI reveals a real product issue
 
-This keeps:
-- the library canonical
-- the CLI practical
-- the product grounded in real usage
+This ensures:
+- the library remains canonical
+- the CLI remains practical
+- the product is grounded in real usage
 
 ---
 
 ## 6. Phase Plan
 
-### Phase 1: Compiler Foundation
+### Phase 1: Compiler Foundation (Design-Time First)
+
 Library:
-- schema parsing
-- law parsing
-- registry
-- compiler validate
-- compiler compile
+- schema parsing & validation
+- law parsing & validation
+- registry (built-in guards)
+- compiler:
+  - validate()
+  - compile()
 - manifest generation
-- compiled process artifact
-- reports
+- compiled process structure
+- digest generation
+- validation & compilation reports
 
 CLI:
 - `vpe validate`
@@ -130,54 +163,61 @@ CLI:
 - `vpe manifest`
 
 Goals:
-- design-time workflow works
-- diagnostics are useful
-- manifests are inspectable
-- compiler usability is proven
+- design-time workflow works independently
+- diagnostics are useful and structured
+- manifests are correct and inspectable
+- compiler usability is proven via CLI
 
 ---
 
-### Phase 2: Runtime Foundation
+### Phase 2: Runtime Foundation (Deterministic Turn)
+
 Library:
 - request model
-- chronicle model
+- chronicle model (anchor + events)
+- context model
+- runtime evaluate()
 - anchor validation
-- runtime execute
 - verdict model
-- engine install
-- engine execute
+- application layer:
+  - request normalization
+  - invariant enforcement
 
 CLI:
 - `vpe execute`
 
 Goals:
-- one deterministic turn works
-- verdict is practical
-- host-style execution is testable through CLI
+- one deterministic turn works end-to-end
+- request shape is practical
+- verdict is usable for persistence/orchestration
+- CLI execute proves real-world usability
 
 ---
 
 ### Phase 3: Simulation Foundation
+
 Library:
 - simulation request model
-- replay engine
-- divergence classification
+- replay engine (prefix-based)
+- divergence detection
+- outcome classification
 - simulation report
 
 CLI:
 - `vpe simulate`
 
 Goals:
-- historical replay works
-- policy change analysis is practical
-- simulation output is useful to humans and automation
+- replay uses runtime-equivalent logic
+- divergence is explainable
+- output is useful for humans and automation
 
 ---
 
 ### Phase 4: Migration Foundation
+
 Library:
 - migration rules
-- transform execution
+- transform execution (move/set/map/conditional)
 - lift request/result
 - migration event planning
 
@@ -185,70 +225,98 @@ CLI:
 - `vpe lift`
 
 Goals:
-- version evolution works deterministically
+- deterministic version evolution works
 - migration can be tested independently
-- law/schema evolution is practical
+- schema/law evolution is practical
 
 ---
 
-### Phase 5: FFI Surface
+### Phase 5: Engine (Orchestration Layer)
+
+Library:
+- process registration (schema + compiled process)
+- process lookup
+- execution orchestration
+- version handling (optional)
+- integration with migration (optional)
+
+Goals:
+- host-friendly embedding API
+- not required for CLI usage
+- does not redefine runtime/compiler semantics
+
+---
+
+### Phase 6: FFI Surface
+
 Library:
 - stabilize public API
-- confirm runtime and compiler semantics
+- confirm runtime + compiler behavior
 
 FFI:
-- opaque engine handle
+- opaque engine pointer
 - JSON request/response
 - explicit free functions
-- no panics across boundaries
+- no panics across boundary
 
 Goals:
 - safe interoperability
-- no semantic drift from Rust library
-- no duplicate logic
+- zero semantic drift
+- no duplicated logic
 
 ---
 
 ## 7. Phase Exit Criteria
 
 ### Phase 1 Exit Criteria
-- schema validates correctly
-- laws validate correctly
-- compiler emits manifests and digest
-- compiled process is immutable and installable
-- CLI validate/compile/manifest are usable
+- schema validation works
+- law validation works
+- compiler produces:
+  - digest
+  - manifests
+  - reports
+- compiled process is deterministic and immutable
+- CLI validate/compile/manifest are usable in practice
 
 ---
 
 ### Phase 2 Exit Criteria
 - runtime executes one deterministic turn
-- anchor validation works
-- verdict shape is stable enough for host usage
-- CLI execute works with JSON request/response
+- anchor validation enforced
+- verdict shape is stable
+- CLI execute works with real JSON inputs
+- no hidden state required
 
 ---
 
 ### Phase 3 Exit Criteria
-- simulation uses runtime-equivalent logic
+- simulation uses runtime logic
 - replay is prefix-based
-- simulation outcomes are classified correctly
-- CLI simulate produces useful reports
+- outcomes are correctly classified
+- CLI simulate produces meaningful diagnostics
 
 ---
 
 ### Phase 4 Exit Criteria
-- migration rules validate correctly
+- migration rules validate
 - transforms are deterministic
-- lift produces valid landing state or deterministic error
+- lift produces valid state or deterministic error
 - CLI lift is usable
 
 ---
 
 ### Phase 5 Exit Criteria
-- FFI uses canonical library APIs only
-- all cross-boundary memory is explicitly managed
-- FFI behavior matches Rust semantics
-- panic-free ABI boundary is enforced
+- engine provides stable orchestration API
+- engine does not duplicate compiler/runtime logic
+- engine remains optional for CLI usage
+
+---
+
+### Phase 6 Exit Criteria
+- FFI uses canonical APIs only
+- memory is explicitly managed
+- no panics cross boundary
+- behavior matches Rust semantics
 
 ---
 
@@ -257,20 +325,21 @@ Goals:
 ### Library and CLI
 The CLI must be developed in sync with the library.
 
-This means:
-- the CLI is added as soon as a library slice exists
-- the CLI is used to pressure-test the library API
-- the CLI must never contain duplicated VPE logic
+Rules:
+- CLI is added as soon as a feature exists
+- CLI is the first usability test
+- CLI must not duplicate logic
+- CLI must use application layer when available
 
 ---
 
 ### Library and FFI
 FFI must trail the library.
 
-This means:
-- no FFI work should define semantics
-- no FFI work should force premature API compromises
-- the library remains the canonical source of truth
+Rules:
+- FFI does not define semantics
+- FFI must not force API compromises
+- Rust library remains canonical
 
 ---
 
@@ -279,49 +348,46 @@ This means:
 Before public release:
 - iteration is allowed
 - ergonomics are prioritized
-- docs must stay aligned with implementation
+- docs must stay aligned
 
 After public release:
-- public API changes require deliberate versioning
-- CLI behavior should remain stable where possible
-- FFI changes must be especially conservative
+- changes require versioning discipline
+- CLI behavior should remain stable
+- FFI changes must be conservative
 
 ---
 
 ## 10. Documentation Rules During Development
 
-As implementation proceeds:
-- docs must be updated before or with behavior changes
-- examples must remain executable in spirit
+- docs must be updated with behavior changes
+- examples must remain realistic and executable in spirit
 - CLI behavior must match CLI spec
-- API docs must match actual library surface
+- API docs must reflect actual usage patterns
 
-Documentation is part of the product and must evolve with the code.
+Documentation is part of the product.
 
 ---
 
 ## 11. Testing Philosophy
 
-Testing will be layered:
-
 ### Library tests
-- parser tests
-- compiler validation tests
-- runtime tests
-- manifest tests
-- migration tests
-- simulation tests
+- schema validation
+- compiler validation
+- manifest correctness
+- runtime evaluation
+- migration correctness
+- simulation correctness
 
 ### CLI tests
 - command integration tests
-- JSON input/output tests
+- JSON I/O tests
 - deterministic output tests
 - exit code tests
 
 ### FFI tests
-- memory safety tests
-- JSON marshaling tests
-- semantic parity tests
+- memory safety
+- JSON marshaling
+- semantic parity
 
 ---
 
@@ -329,60 +395,73 @@ Testing will be layered:
 
 The CLI is the first real usability harness.
 
-If a feature is difficult to expose cleanly through the CLI, it may indicate:
-- awkward library API
-- unclear data contract
+If a feature is hard to expose in CLI, it likely indicates:
+- awkward API
+- unclear data model
 - weak diagnostics
-- unclear product semantics
+- flawed product semantics
 
-The CLI is therefore a development tool and a product validation tool.
+The CLI is both:
+- a development tool
+- a product validation tool
 
 ---
 
 ## 13. Non-Goals for Early Phases
 
-The following are explicitly not required in the earliest implementation phases:
+Not required early:
 
-- artifact binary serialization format
-- self-hosting the CLI in VPE
+- compiled artifact binary format
+- runtime plugin system
+- scripting for guards
+- self-hosting CLI in VPE
 - rich human-only CLI rendering
 - advanced editor integrations
-- complex plugin packaging
-- broad FFI language bindings
-
-These may be added later.
+- broad FFI bindings
 
 ---
 
 ## 14. Locked Decisions
 
-The following are locked for implementation planning:
-
 1. Rust library is canonical
-2. CLI is first-class and built in sync with library
-3. FFI follows after core semantics stabilize
-4. CLI and FFI must remain thin wrappers
-5. JSON is the canonical machine-readable CLI format
+2. CLI is first-class and built in sync
+3. FFI follows after stabilization
+4. CLI and FFI are thin wrappers
+5. JSON is canonical CLI format
 6. Design-time workflows are first-class
-7. Compiler and runtime remain separate concerns
-8. CompiledProcess is immutable and installable
-9. Registry is compile-time only
-10. The same logic model powers compile, runtime, simulation, and migration
+7. Compiler and runtime are separate
+8. CompiledProcess is immutable
+9. Registry is required at compile time
+10. Same logic model powers:
+   - compile
+   - runtime
+   - simulation
+   - migration
+11. CLI is the primary usability validation surface
+12. Engine is orchestration, not the core
 
 ---
 
 ## 15. Summary
 
-VPE will be implemented as one core platform with multiple delivery surfaces.
+VPE is built as a unified decision platform with multiple surfaces.
+
+Core truth:
+- Compiler + Runtime + Registry
+
+Delivery surfaces:
+- Rust API
+- CLI
+- FFI
 
 Build order:
-
 - Core library first
-- CLI in sync
+- CLI in sync (early)
+- Engine as orchestration
 - FFI after stabilization
 
-This plan ensures:
+This ensures:
 - strong semantics
-- practical usability
+- real usability
 - minimal duplication
-- a product that is testable, teachable, and stable
+- a system that is testable, explainable, and scalable

@@ -1,5 +1,5 @@
 # VPE CLI Specification
-Version: Canonical v1
+Version: Canonical v1.1
 
 ## 1. Purpose
 
@@ -20,6 +20,7 @@ It is designed to be:
 - JSON-first
 - thin over the Rust API
 - suitable for CI/CD and local development
+- extensible via custom CLI harnesses
 
 ---
 
@@ -32,6 +33,8 @@ It is designed to be:
 5. The CLI exposes domain concepts, not internal structures.
 6. The CLI is scriptable via stdin/stdout.
 7. Human-friendly output is optional and secondary.
+8. The CLI must support both **design-time workflows** and **runtime evaluation**.
+9. The CLI must not diverge from Rust API semantics.
 
 ---
 
@@ -45,6 +48,8 @@ The CLI exposes the following commands:
 - execute
 - simulate
 - lift
+
+Each command corresponds directly to a Rust API capability.
 
 ---
 
@@ -108,8 +113,8 @@ Standard envelope:
 
 ### Exit Codes
 
-- 0 → success
-- non-zero → failure
+- 0 → success  
+- non-zero → failure  
 
 ---
 
@@ -127,7 +132,7 @@ vpe compile --schema schema.json --law law.json
 
 ---
 
-### Compiled Mode (Future)
+### Compiled Mode (Planned)
 
 Uses:
 - compiled artifact
@@ -135,6 +140,17 @@ Uses:
 Example:
 
 vpe execute --compiled process.vpe --request request.json
+
+---
+
+### Notes
+
+1. Source mode must always perform validation before execution.
+2. Compiled mode must only accept validated artifacts.
+3. Compiled artifacts must include:
+   - digest
+   - version metadata
+   - compatibility markers
 
 ---
 
@@ -163,6 +179,12 @@ Output:
   "warnings": [],
   "errors": []
 }
+
+Notes:
+- Performs schema validation
+- Performs law validation
+- Resolves guard types via registry
+- Does not produce compiled artifacts
 
 ---
 
@@ -195,6 +217,11 @@ Output:
   "errors": []
 }
 
+Notes:
+- Produces deterministic digest
+- Produces per-state manifests
+- May later support artifact export
+
 ---
 
 ### 7.3 manifest
@@ -217,6 +244,10 @@ Output:
   "warnings": [],
   "errors": []
 }
+
+Notes:
+- Uses compiler pipeline internally
+- Does not require runtime execution
 
 ---
 
@@ -269,6 +300,11 @@ vpe execute --schema schema.json --law law.json --request request.json
   "errors": []
 }
 
+Notes:
+- Executes exactly one deterministic turn
+- Validates anchor consistency
+- Does not execute side effects
+
 ---
 
 ### 7.5 simulate
@@ -309,6 +345,11 @@ vpe simulate --schema schema.json --law law.json --input simulation.json
   "errors": []
 }
 
+Notes:
+- Uses same runtime logic
+- Does not execute effects
+- Uses event timestamps as time source
+
 ---
 
 ### 7.6 lift
@@ -348,9 +389,47 @@ vpe lift --schema schema.json --law law.json --input lift.json
   "errors": []
 }
 
+Notes:
+- Applies migration rules deterministically
+- Produces transformed context
+- Does not mutate history
+
 ---
 
-## 8. Error Model
+## 8. Custom Guard Support
+
+### Official CLI
+
+1. Supports built-in guards only.
+2. Unknown guard types result in validation failure.
+3. No dynamic plugin system is required in v1.
+
+---
+
+### Custom CLI Harness
+
+Projects may create their own CLI binary:
+
+- register custom guards
+- reuse CLI command modules
+- extend registry during startup
+
+Example (conceptual):
+
+custom-vpe-cli
+  ├── main.rs
+  ├── guards/
+  │   ├── my_guard.rs
+  │   └── mod.rs
+
+Rules:
+1. Must use GuardRegistryBuilder
+2. Must not modify VPE semantics
+3. Must remain deterministic
+
+---
+
+## 9. Error Model
 
 Errors must include:
 
@@ -369,20 +448,30 @@ Example:
   "message": "Field rec.amount expects Number"
 }
 
+Error categories:
+- validation
+- compile
+- runtime
+- simulation
+- migration
+
 ---
 
-## 9. Human-Friendly Output (Optional)
+## 10. Human-Friendly Output (Optional)
 
 Future flags:
 
 --pretty  
 --summary  
 
-These must not replace JSON output.
+Rules:
+1. Must not replace JSON output
+2. Must not alter data semantics
+3. Must remain deterministic
 
 ---
 
-## 10. Extensibility
+## 11. Extensibility
 
 The CLI must support future additions without breaking existing commands.
 
@@ -393,9 +482,14 @@ Possible future commands:
 - verify
 - diff
 
+Future capabilities:
+- compiled artifact export/import
+- interactive debugging
+- law diffing
+
 ---
 
-## 11. Summary
+## 12. Summary
 
 The VPE CLI is:
 
