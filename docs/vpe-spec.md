@@ -1,5 +1,5 @@
 # Verified Process Engine (VPE) Specification
-Version: Canonical v1.2
+Version: Canonical v1.3
 
 ## 1. Purpose
 VPE is a deterministic process engine implemented in Rust. It compiles declarative laws into optimized structures and evaluates them against explicit inputs to produce decisions.
@@ -25,6 +25,11 @@ Execution is **turn-based**:
 - each call evaluates exactly one state and one action
 - produces one deterministic result (Verdict or Error)
 
+Compiled processes are:
+- immutable
+- fully validated
+- independent of the registry at runtime
+
 ---
 
 ## 3. Core Components
@@ -43,17 +48,40 @@ Defines all valid typed fields for:
 - `ext.*`
 - `calc.*`
 
+System fields (`sys.*`) are:
+- reserved
+- read-only
+- provided explicitly by the host or derived deterministically
+
 ### Registry
 Maps identifiers to Rust implementations:
 - Guard factories
 - (optionally) effect descriptors
 
+Scope:
+- used only during compilation
+- not required during runtime execution
+
 ### Compiler
 Validates and transforms a Law into a compiled process:
 - enforces invariants
 - resolves all identifiers
+- binds guards from the registry
 - generates manifests
 - produces a deterministic digest
+
+### CompiledProcess
+An immutable artifact produced by the compiler.
+
+Contains:
+- fully resolved state machine
+- bound guard instances
+- manifests
+- digest
+
+Properties:
+- safe for reuse across threads
+- installable into runtime without recompilation
 
 ### Runtime
 Evaluates a compiled process:
@@ -119,6 +147,9 @@ Responsibilities:
 - evaluate business conditions
 - declare data requirements for manifest generation
 
+Constraint:
+- Guard requirements must fully describe all data dependencies used during evaluation
+
 ---
 
 ## 6. Effects
@@ -144,16 +175,23 @@ Typical fields:
 1. Parse Law
 2. Schema validation
 3. Identifier validation
-4. Type validation
-5. Graph construction (state indexing)
-6. Topology validation (reachability, orphans)
-7. Auto-transition cycle detection (`AUTO_TICK`)
-8. Saga validation (transient state enforcement)
-9. Guard/effect compilation (Registry binding)
-10. Manifest generation (per-state requirements)
-11. Digest generation (deterministic hash)
+4. Namespace validation
+5. Type validation
+6. Graph construction (state indexing)
+7. Topology validation (reachability, orphans)
+8. Auto-transition cycle detection (`AUTO_TICK`)
+9. Saga validation (transient state enforcement)
+10. Guard/effect compilation (Registry binding)
+11. Manifest generation (per-state requirements)
+12. Digest generation (deterministic hash)
 
 Compilation must fail on any invariant violation.
+
+Additional guarantees:
+- all referenced guards must exist in the registry
+- all referenced fields must exist in the schema
+- all guard requirements must be reflected in manifests
+- missing or incomplete manifest coverage is a compilation error
 
 ---
 
@@ -184,10 +222,9 @@ Compilation produces:
 - State manifests
 - Deterministic digest
 
-This mode does not require:
-- runtime engine
-- persistence layer
-- external systems
+CompiledProcess artifacts:
+- may be cached or distributed
+- may be installed into runtime without recompilation
 
 ---
 
@@ -209,6 +246,7 @@ Runtime guarantees:
 - no side effects
 - no external calls
 - no mutation of inputs
+- no dependency on registry
 
 ---
 
@@ -228,6 +266,7 @@ Requirements:
 - Anchor must be present
 - Anchor state must match current_state
 - data must satisfy manifest requirements
+- all `sys.*` values must be explicitly provided or derived deterministically
 
 ---
 
@@ -265,6 +304,11 @@ For each state, the compiler produces a manifest describing:
 - required context:
   - specific `rec.*`, `ext.*`, `calc.*`, `sys.*` fields
 
+Properties:
+- fully derived at compile time
+- deterministic
+- complete with respect to all guard requirements
+
 Purpose:
 - minimal data loading
 - predictable execution cost
@@ -290,6 +334,7 @@ Properties:
 - deterministic
 - append-only (history preserved)
 - produces a migration event
+- must result in a valid state in the target process
 
 ---
 
@@ -324,7 +369,7 @@ Rust crate is first-class. FFI is a thin wrapper.
   - engine
   - compiler
   - runtime
-  - registry
+  - registry (compile-time only)
   - schema
   - types
   - migration (feature)
@@ -348,6 +393,7 @@ Expose:
 - Guard trait
 - Engine facade
 - Compiler (design-time API)
+- CompiledProcess artifact
 - Request / Verdict types
 - Registry builder
 - Schema and Law source types
@@ -364,7 +410,7 @@ Hide:
 Users extend VPE by:
 
 - implementing Guard trait
-- registering via GuardRegistry
+- registering via GuardRegistry (compile-time)
 
 Optional:
 - custom effect handling in host system
