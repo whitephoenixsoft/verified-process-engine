@@ -22,7 +22,22 @@ This leads to:
 
 VPE replaces this with:
 
-Logic as a compiled, deterministic system
+**Logic as a compiled, deterministic system**
+
+---
+
+## What Makes VPE Different
+
+VPE is not:
+- a workflow engine
+- a job scheduler
+- a rules engine in the traditional sense
+
+VPE is a **decision layer** that complements those systems.
+
+It answers one question, extremely well:
+
+> Given everything we know right now, what should happen next?
 
 ---
 
@@ -31,7 +46,7 @@ Logic as a compiled, deterministic system
 ### Deterministic by Design
 Every decision is a pure function:
 
-`f(Process, Request) → Verdict`
+f(Process, Request) → Verdict
 
 Given the same:
 - process definition
@@ -87,6 +102,26 @@ Your application remains in control of:
 - APIs
 
 VPE acts as the decision boundary, not the system owner.
+
+---
+
+## How VPE Fits Into Your Stack
+
+VPE is designed to **work with**, not replace, your existing tools.
+
+- With **workflow engines** (Temporal, Airflow, Argo):  
+  VPE decides → workflow executes
+
+- With **event-sourced systems**:  
+  events → VPE → deterministic decisions
+
+- With **microservices**:  
+  services call VPE for consistent decision logic
+
+- With **policy engines** (OPA):  
+  VPE handles multi-step, stateful decisions
+
+Think of VPE as the **brain**, not the body.
 
 ---
 
@@ -146,7 +181,6 @@ A high-performance evaluator that:
 
 ## Example (Rust)
 
-```rust
 use vpe::prelude::*;
 
 // Build engine
@@ -184,7 +218,7 @@ let verdict = engine.execute(VpeRequest {
 // Host persists + executes effects
 persist(verdict)?;
 dispatch(verdict.effects)?;
-```
+
 ---
 
 ## The Verdict
@@ -299,6 +333,29 @@ VPE fits naturally into:
 - Workflow orchestration
 - Microservice coordination
 - Decision engines / rule systems
+
+---
+
+## CLI (Design-Time + Runtime Harness)
+
+VPE includes a CLI for:
+
+- validation
+- compilation
+- manifest inspection
+- execution
+- simulation
+- migration
+
+Example:
+
+vpe validate --schema schema.json --law law.json  
+vpe execute --schema schema.json --law law.json --request request.json  
+
+The CLI is:
+- JSON-first
+- deterministic
+- built on the same Rust APIs
 
 ---
 
