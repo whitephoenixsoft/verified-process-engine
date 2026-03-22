@@ -392,4 +392,4 @@ FFI is a thin interoperability layer.
 
 ## License
 
-Apache 2.0
+MIT License 
