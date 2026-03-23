@@ -1,5 +1,5 @@
 # VPE Development Sequencing Plan
-Version: Canonical v1.1
+Version: Canonical v1.2
 
 ## 1. Purpose
 
@@ -29,7 +29,7 @@ The CLI is a thin harness over the Rust library.
 The FFI is not a separate implementation.  
 The FFI is a thin interoperability layer over the Rust library.
 
-The **Compiler and Runtime are the core execution model**.  
+The **Compiler, Runtime, and Event Model define system truth**.  
 The Engine is an orchestration layer built on top of them.
 
 ---
@@ -37,15 +37,17 @@ The Engine is an orchestration layer built on top of them.
 ## 3. Delivery Surfaces
 
 ### Layer 1: Rust Library (Canonical Core)
+
 The canonical implementation of:
+
 - types
 - schema
-- registry
+- registry (compile-time only)
 - compiler (design-time)
 - runtime (execution)
-- application layer (request orchestration)
-- engine facade (optional orchestration)
 - compiled process
+- event model (truth layer)
+- manifest system (data contract)
 - simulation
 - migration
 
@@ -53,13 +55,14 @@ This layer defines all semantics.
 
 ---
 
-### Layer 1.5: Application Layer (New)
+### Layer 1.5: Application Layer
 
 A thin internal layer shared by CLI, Engine, and FFI.
 
 Responsibilities:
 - request normalization
 - input validation (pre-runtime)
+- manifest enforcement (data completeness)
 - orchestration of:
   - compile → runtime
   - manifest → data validation
@@ -67,7 +70,7 @@ Responsibilities:
 
 This layer:
 - prevents duplication across CLI, Engine, and FFI
-- is not exposed as a separate product surface
+- enforces invariants before runtime
 - must remain thin and deterministic
 
 ---
@@ -75,6 +78,7 @@ This layer:
 ### Layer 2: CLI
 
 The first operational harness for:
+
 - validate
 - compile
 - manifest
@@ -83,27 +87,35 @@ The first operational harness for:
 - lift
 
 The CLI exists to:
+
 - test product usability
 - support local development
 - support CI/CD
 - act as a debugging and experimentation harness
 
 The CLI must:
+
 - remain thin
 - call the application layer + library
 - not duplicate logic
+
+The CLI is both:
+- a developer tool
+- a product validation surface
 
 ---
 
 ### Layer 3: FFI
 
 The interoperability surface for:
+
 - .NET
 - Go
 - Python
 - other languages
 
 The FFI must be added only after:
+
 - core semantics are stable
 - compiler and runtime APIs are proven
 - CLI validates practical usability
@@ -114,11 +126,14 @@ The FFI must be added only after:
 
 Implementation order is:
 
-1. Core library (compiler + runtime + registry)
-2. CLI in sync with core (early)
-3. Application layer stabilization
-4. Simulation & migration
-5. FFI after semantics stabilize
+1. Core library (compiler + registry + schema)
+2. CLI in sync with compiler (early)
+3. Runtime + event model integration
+4. Application layer stabilization
+5. Simulation
+6. Migration
+7. Engine (optional orchestration)
+8. FFI after stabilization
 
 This order is locked unless explicitly revised.
 
@@ -135,6 +150,7 @@ For each feature slice:
 5. Refine the library only if the CLI reveals a real product issue
 
 This ensures:
+
 - the library remains canonical
 - the CLI remains practical
 - the product is grounded in real usage
@@ -152,8 +168,10 @@ Library:
 - compiler:
   - validate()
   - compile()
+- guard binding
 - manifest generation
-- compiled process structure
+- manifest validation (coverage + unused warnings)
+- compiled process structure (immutable)
 - digest generation
 - validation & compilation reports
 
@@ -165,7 +183,7 @@ CLI:
 Goals:
 - design-time workflow works independently
 - diagnostics are useful and structured
-- manifests are correct and inspectable
+- manifests are correct, complete, and inspectable
 - compiler usability is proven via CLI
 
 ---
@@ -176,20 +194,25 @@ Library:
 - request model
 - chronicle model (anchor + events)
 - context model
+- event model integration (STATE_TRANSITION emission)
 - runtime evaluate()
 - anchor validation
-- verdict model
-- application layer:
-  - request normalization
-  - invariant enforcement
+- verdict model (including emitted events)
+- strict determinism enforcement
+
+Application Layer:
+- request normalization
+- manifest enforcement
+- invariant validation (pre-runtime)
 
 CLI:
 - `vpe execute`
 
 Goals:
 - one deterministic turn works end-to-end
-- request shape is practical
+- event emission is correct and complete
 - verdict is usable for persistence/orchestration
+- manifest-driven execution is enforced
 - CLI execute proves real-world usability
 
 ---
@@ -199,8 +222,8 @@ Goals:
 Library:
 - simulation request model
 - replay engine (prefix-based)
-- divergence detection
-- outcome classification
+- divergence detection (state + event level)
+- outcome classification (Seamless / Diverted / Incompatible)
 - simulation report
 
 CLI:
@@ -208,8 +231,9 @@ CLI:
 
 Goals:
 - replay uses runtime-equivalent logic
-- divergence is explainable
+- divergence is explainable and traceable
 - output is useful for humans and automation
+- simulation aligns with event model semantics
 
 ---
 
@@ -217,17 +241,20 @@ Goals:
 
 Library:
 - migration rules
+- migration guard evaluation
 - transform execution (move/set/map/conditional)
 - lift request/result
-- migration event planning
+- migration event generation
+- landing state validation
 
 CLI:
 - `vpe lift`
 
 Goals:
 - deterministic version evolution works
+- migration produces valid state + event
+- migration aligns with event model (append-only)
 - migration can be tested independently
-- schema/law evolution is practical
 
 ---
 
@@ -238,12 +265,12 @@ Library:
 - process lookup
 - execution orchestration
 - version handling (optional)
-- integration with migration (optional)
+- integration with migration
 
 Goals:
 - host-friendly embedding API
-- not required for CLI usage
 - does not redefine runtime/compiler semantics
+- remains optional for CLI usage
 
 ---
 
@@ -251,7 +278,7 @@ Goals:
 
 Library:
 - stabilize public API
-- confirm runtime + compiler behavior
+- confirm runtime + compiler + event semantics
 
 FFI:
 - opaque engine pointer
@@ -273,7 +300,7 @@ Goals:
 - law validation works
 - compiler produces:
   - digest
-  - manifests
+  - manifests (complete + validated)
   - reports
 - compiled process is deterministic and immutable
 - CLI validate/compile/manifest are usable in practice
@@ -283,7 +310,8 @@ Goals:
 ### Phase 2 Exit Criteria
 - runtime executes one deterministic turn
 - anchor validation enforced
-- verdict shape is stable
+- event emission is correct (STATE_TRANSITION)
+- verdict includes events and effects
 - CLI execute works with real JSON inputs
 - no hidden state required
 
@@ -292,7 +320,8 @@ Goals:
 ### Phase 3 Exit Criteria
 - simulation uses runtime logic
 - replay is prefix-based
-- outcomes are correctly classified
+- divergence is correctly classified
+- simulation aligns with event semantics
 - CLI simulate produces meaningful diagnostics
 
 ---
@@ -300,7 +329,8 @@ Goals:
 ### Phase 4 Exit Criteria
 - migration rules validate
 - transforms are deterministic
-- lift produces valid state or deterministic error
+- lift produces valid state + migration event
+- append-only semantics enforced
 - CLI lift is usable
 
 ---
@@ -308,7 +338,7 @@ Goals:
 ### Phase 5 Exit Criteria
 - engine provides stable orchestration API
 - engine does not duplicate compiler/runtime logic
-- engine remains optional for CLI usage
+- engine remains optional
 
 ---
 
@@ -323,6 +353,7 @@ Goals:
 ## 8. Synchronization Rules
 
 ### Library and CLI
+
 The CLI must be developed in sync with the library.
 
 Rules:
@@ -334,6 +365,7 @@ Rules:
 ---
 
 ### Library and FFI
+
 FFI must trail the library.
 
 Rules:
@@ -360,9 +392,9 @@ After public release:
 ## 10. Documentation Rules During Development
 
 - docs must be updated with behavior changes
-- examples must remain realistic and executable in spirit
+- examples must remain realistic
 - CLI behavior must match CLI spec
-- API docs must reflect actual usage patterns
+- API docs must reflect real usage
 
 Documentation is part of the product.
 
@@ -375,6 +407,7 @@ Documentation is part of the product.
 - compiler validation
 - manifest correctness
 - runtime evaluation
+- event emission correctness
 - migration correctness
 - simulation correctness
 
@@ -399,7 +432,7 @@ If a feature is hard to expose in CLI, it likely indicates:
 - awkward API
 - unclear data model
 - weak diagnostics
-- flawed product semantics
+- flawed semantics
 
 The CLI is both:
 - a development tool
@@ -423,31 +456,33 @@ Not required early:
 
 ## 14. Locked Decisions
 
-1. Rust library is canonical
-2. CLI is first-class and built in sync
-3. FFI follows after stabilization
-4. CLI and FFI are thin wrappers
-5. JSON is canonical CLI format
-6. Design-time workflows are first-class
-7. Compiler and runtime are separate
-8. CompiledProcess is immutable
-9. Registry is required at compile time
-10. Same logic model powers:
+1. Rust library is canonical  
+2. CLI is first-class and built in sync  
+3. FFI follows after stabilization  
+4. CLI and FFI are thin wrappers  
+5. JSON is canonical CLI format  
+6. Design-time workflows are first-class  
+7. Compiler and runtime are separate  
+8. CompiledProcess is immutable  
+9. Registry is compile-time only  
+10. Event model defines truth  
+11. Manifest defines data contract  
+12. Same logic model powers:
    - compile
    - runtime
    - simulation
-   - migration
-11. CLI is the primary usability validation surface
-12. Engine is orchestration, not the core
+   - migration  
+13. CLI is the primary usability validation surface  
+14. Engine is orchestration, not the core  
 
 ---
 
 ## 15. Summary
 
-VPE is built as a unified decision platform with multiple surfaces.
+VPE is a unified decision platform.
 
 Core truth:
-- Compiler + Runtime + Registry
+- Compiler + Runtime + Event Model + Manifest
 
 Delivery surfaces:
 - Rust API
@@ -455,13 +490,15 @@ Delivery surfaces:
 - FFI
 
 Build order:
-- Core library first
-- CLI in sync (early)
-- Engine as orchestration
-- FFI after stabilization
+- Compiler first
+- CLI in sync
+- Runtime + events
+- Simulation + migration
+- Engine
+- FFI
 
 This ensures:
 - strong semantics
-- real usability
+- practical usability
 - minimal duplication
-- a system that is testable, explainable, and scalable
+- a system that is deterministic, explainable, and evolvable

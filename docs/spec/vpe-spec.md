@@ -1,5 +1,5 @@
 # Verified Process Engine (VPE) Specification
-Version: Canonical v1.3
+Version: Canonical v1.4
 
 ## 1. Purpose
 VPE is a deterministic process engine implemented in Rust. It compiles declarative laws into optimized structures and evaluates them against explicit inputs to produce decisions.
@@ -170,7 +170,39 @@ Typical fields:
 
 ---
 
-## 7. Compiler Pipeline
+## 7. Verdict Events (Planned Events)
+
+In addition to effects, VPE produces **planned events** that represent the state transition and must be persisted by the host.
+
+These events are distinct from effects:
+- **effects** = external intent
+- **events** = system-of-record history
+
+### Event Structure
+
+Each emitted event must include:
+
+- trace_id
+- event_kind (e.g., STATE_TRANSITION, MIGRATION)
+- action
+- state_before
+- state_after
+- timestamp (provided by host or sys.now)
+- metadata (optional payload)
+
+Optional:
+- parent_event_id (for lineage)
+- correlation identifiers
+
+### Properties
+
+- events are deterministic outputs of evaluation
+- events must maintain traceability
+- events must be persisted atomically with state
+
+---
+
+## 8. Compiler Pipeline
 
 1. Parse Law
 2. Schema validation
@@ -183,7 +215,8 @@ Typical fields:
 9. Saga validation (transient state enforcement)
 10. Guard/effect compilation (Registry binding)
 11. Manifest generation (per-state requirements)
-12. Digest generation (deterministic hash)
+12. Manifest validation
+13. Digest generation (deterministic hash)
 
 Compilation must fail on any invariant violation.
 
@@ -193,9 +226,15 @@ Additional guarantees:
 - all guard requirements must be reflected in manifests
 - missing or incomplete manifest coverage is a compilation error
 
+### Manifest Validation Rules
+
+- every guard requirement must be present in the manifest → error
+- manifest requirements not used by any guard → warning
+- redundant or excessive requirements should be minimized
+
 ---
 
-## 8. Design-Time Compilation
+## 9. Design-Time Compilation
 
 VPE supports compilation independent of runtime execution.
 
@@ -228,7 +267,7 @@ CompiledProcess artifacts:
 
 ---
 
-## 9. Runtime Algorithm
+## 10. Runtime Algorithm
 
 Given a request:
 
@@ -250,7 +289,7 @@ Runtime guarantees:
 
 ---
 
-## 10. Request Model
+## 11. Request Model
 
 A Request contains:
 
@@ -270,7 +309,7 @@ Requirements:
 
 ---
 
-## 11. Verdict Model
+## 12. Verdict Model
 
 A Verdict contains:
 
@@ -280,20 +319,25 @@ A Verdict contains:
 - next_state
 - state_patch (context mutations)
 - effects (intent only)
-- emitted events (planned, not persisted)
+- emitted_events (planned, not persisted)
 
 Properties:
 - deterministic
 - side-effect free
 - suitable for persistence
 
-The host is responsible for:
-- atomic persistence of state + events
-- execution of effects
+### Host Responsibilities
+
+The host must:
+
+- persist state changes and emitted events atomically
+- maintain event lineage and trace integrity
+- execute effects separately
+- ensure idempotency where required
 
 ---
 
-## 12. Manifest System
+## 13. Manifest System
 
 For each state, the compiler produces a manifest describing:
 
@@ -316,7 +360,7 @@ Purpose:
 
 ---
 
-## 13. Migration
+## 14. Migration
 
 Migration includes:
 
@@ -330,15 +374,26 @@ Migration includes:
   - conditional transforms
 - landing state resolution
 
+Outputs:
+- new state
+- transformed context
+- migration event
+
 Properties:
 - deterministic
 - append-only (history preserved)
-- produces a migration event
 - must result in a valid state in the target process
+
+### Host Responsibilities
+
+- persist migration event
+- persist transformed context atomically
+- never rewrite historical events
+- ensure continuity of trace_id and lineage
 
 ---
 
-## 14. Simulation
+## 15. Simulation
 
 Simulation:
 
@@ -358,7 +413,26 @@ Includes:
 
 ---
 
-## 15. Rust Crate Design
+## 16. Future Evolution: Multi-Process Orchestration
+
+VPE currently evaluates a single process per execution.
+
+Future versions may introduce:
+- process pipelines
+- process-to-process handoff
+- orchestration across multiple compiled processes
+
+Current approach:
+- host invokes VPE multiple times with different processes
+
+Future direction:
+- a higher-level process manager may coordinate multi-process flows
+
+This is intentionally not part of the core runtime.
+
+---
+
+## 17. Rust Crate Design
 
 ### Core Principle
 Rust crate is first-class. FFI is a thin wrapper.
@@ -382,12 +456,12 @@ Rust crate is first-class. FFI is a thin wrapper.
 - default: core engine
 - simulation: enables simulation module
 - migration: enables migration module
-- ffi: enables C ABI
-- serde: serialization
+- ffi: enables C ABI (or separate crate)
+- serde: serialization support (typically enabled)
 
 ---
 
-## 16. Public API Strategy
+## 18. Public API Strategy
 
 Expose:
 - Guard trait
@@ -405,7 +479,7 @@ Hide:
 
 ---
 
-## 17. Extension Model
+## 19. Extension Model
 
 Users extend VPE by:
 
@@ -417,7 +491,7 @@ Optional:
 
 ---
 
-## 18. Performance Model
+## 20. Performance Model
 
 Goals:
 - sub-microsecond to low-microsecond decisions
@@ -432,7 +506,7 @@ Strategies:
 
 ---
 
-## 19. FFI Model
+## 21. FFI Model
 
 - opaque engine pointer
 - JSON request/response
@@ -443,7 +517,7 @@ FFI must not dictate internal design.
 
 ---
 
-## 20. Error Model
+## 22. Error Model
 
 Errors must be:
 - deterministic
