@@ -19,25 +19,27 @@ The compiler MUST enforce all rules defined here.
 
 A schema is a JSON object with the following structure:
 
+```json
 {
   "domain": "string",
   "version": "string",
   "fields": [ FieldDefinition ]
 }
-
+```
 ---
 
 ## 3. FieldDefinition
 
 Each field is defined as:
 
+```json
 {
   "name": "string",
   "type": "VpeType",
   "description": "string (optional)",
   "enum": ["string"] (optional)
 }
-
+```
 ---
 
 ## 4. VpeType
@@ -92,12 +94,13 @@ Supported types:
 
 Example:
 
+```json
 {
   "name": "tier",
   "type": "Enum",
   "enum": ["Gold", "Silver", "Bronze"]
 }
-
+```
 ---
 
 ## 6. Namespaces
@@ -259,10 +262,11 @@ For Enum fields:
 
 Compiler MUST reject:
 
+```json
 {
   "target": "sys.now"
 }
-
+```
 ---
 
 ## 13. Schema Lookup
@@ -390,6 +394,7 @@ Compiler MUST error on:
 
 ## 23. Minimal Schema Example
 
+```json
 {
   "domain": "Example",
   "version": "1.0.0",
@@ -398,7 +403,7 @@ Compiler MUST error on:
     { "name": "status", "type": "Enum", "enum": ["A", "B"] }
   ]
 }
-
+```
 ---
 
 ## 24. Internal Representation (Conceptual)

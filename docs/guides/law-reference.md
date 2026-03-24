@@ -29,6 +29,7 @@ Required fields:
 
 Example:
 
+```jsin
 {
   "domain": "OrderManagement",
   "process": "OrderFlow",
@@ -37,7 +38,7 @@ Example:
   "states": [],
   "migration_rules": []
 }
-
+```
 ---
 
 ## 3. State Definition
@@ -50,12 +51,13 @@ Fields:
 
 Example:
 
+```json
 {
   "name": "PendingPayment",
   "is_transient": true,
   "transitions": []
 }
-
+```
 Constraints:
 
 - State names must be unique
@@ -77,6 +79,7 @@ Fields:
 
 Example:
 
+```json
 {
   "action": "Submit",
   "to": "Approved",
@@ -84,7 +87,7 @@ Example:
   "guards": [],
   "effects": []
 }
-
+```
 Constraints:
 
 - "to" must reference a valid state
@@ -116,12 +119,13 @@ Fields:
 
 Example:
 
+```json
 {
   "type": "GreaterThan",
   "path": "rec.amount",
   "value": 1000
 }
-
+```
 Constraints:
 
 - type must exist in GuardRegistry
@@ -158,6 +162,7 @@ Fields:
 
 Example:
 
+```json
 {
   "type": "WebHook",
   "target": "Payments",
@@ -166,7 +171,7 @@ Example:
     "order_id": "rec.order_id"
   }
 }
-
+```
 Constraints:
 
 - effects are not executed by VPE
@@ -247,13 +252,14 @@ Type mismatches cause compilation failure.
 
 Structure:
 
+```json
 {
   "from_state": "OldState",
   "to_state": "NewState",
   "guards": [],
   "transforms": []
 }
-
+```
 Fields:
 
 - from_state: string (required)
@@ -275,22 +281,23 @@ Supported operations:
 
 Move:
 
+```json
 {
   "op": "move",
   "from": "old_field",
   "to": "rec.new_field"
 }
-
+```
 Set:
-
+```json
 {
   "op": "set",
   "target": "rec.flag",
   "value": true
 }
-
+```
 Map:
-
+```json
 {
   "op": "map",
   "target": "rec.priority",
@@ -300,7 +307,7 @@ Map:
     "2": "Medium"
   }
 }
-
+```
 Constraints:
 
 - cannot write to sys.*
@@ -311,12 +318,12 @@ Constraints:
 ## 15. Conditional Transforms
 
 Structure:
-
+```json
 {
   "guards": [],
   "ops": []
 }
-
+```
 Rules:
 
 - guards evaluated first

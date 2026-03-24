@@ -19,6 +19,7 @@ Use when:
 - linear process
 - minimal branching
 
+```json
 {
   "name": "Draft",
   "transitions": [
@@ -29,7 +30,7 @@ Use when:
     }
   ]
 }
-
+```
 Why it works:
 - clear intent
 - minimal complexity
@@ -43,6 +44,7 @@ Use when:
 - multiple decision paths
 - clear precedence rules
 
+```json
 {
   "name": "Submitted",
   "transitions": [
@@ -62,7 +64,7 @@ Use when:
     }
   ]
 }
-
+```
 Why it works:
 - deterministic ordering
 - explicit fallback
@@ -73,11 +75,11 @@ Why it works:
 ## 4. Pattern: Explicit Fallback
 
 Always define a fallback.
-
+```json
 {
   "guards": []
 }
-
+```
 Why:
 - prevents runtime errors
 - documents default behavior
@@ -116,14 +118,16 @@ Flow:
 2. Move to transient state
 3. Wait for outcome
 
+```json
 {
   "action": "SubmitPayment",
   "to": "PendingPayment",
   "effects": [ ... ]
 }
-
+```
 Transient state:
 
+```json
 {
   "name": "PendingPayment",
   "is_transient": true,
@@ -137,7 +141,7 @@ Transient state:
     }
   ]
 }
-
+```
 Why it works:
 - prevents stuck processes
 - models real-world async behavior
@@ -148,12 +152,13 @@ Why it works:
 
 Use history-based guards.
 
+```json
 {
   "type": "OccurredWithin",
   "target_action": "Login",
   "window_seconds": 3600
 }
-
+```
 Why:
 - supports rate limiting
 - enables fraud detection
@@ -166,12 +171,12 @@ Why:
 Prefer multiple simple guards:
 
 ✔ Good:
-
+```json
 [
   { "type": "GreaterThan", "path": "rec.amount", "value": 1000 },
   { "type": "Equals", "path": "ext.tier", "value": "Premium" }
 ]
-
+```
 ❌ Bad:
 
 One large custom guard doing everything
@@ -187,12 +192,13 @@ Why:
 
 Every transient state must have a timeout.
 
+```json
 {
   "action": "AUTO_TICK",
   "to": "Failed",
   "guards": [{ "type": "TimeElapsed", "seconds": 300 }]
 }
-
+```
 Why:
 - prevents stuck records
 - guarantees progress

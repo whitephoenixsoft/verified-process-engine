@@ -325,6 +325,7 @@ Too many unused fields.
 
 ## 15. Example Schema
 
+```json
 {
   "domain": "LoanApproval",
   "version": "1.0.0",
@@ -347,7 +348,7 @@ Too many unused fields.
     }
   ]
 }
-
+```
 ---
 
 ## 16. Mental Model

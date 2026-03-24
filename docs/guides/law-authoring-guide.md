@@ -22,7 +22,7 @@ Given (State, Action, Context, History) → produce (Next State, Effects, Events
 ## 2. The Smallest Possible Law
 
 A minimal valid process:
-
+```json
 {
   "domain": "Example",
   "process": "SimpleFlow",
@@ -44,7 +44,7 @@ A minimal valid process:
     }
   ]
 }
-
+```
 Key ideas:
 - No guards = always allowed
 - One action → one transition
@@ -55,7 +55,7 @@ Key ideas:
 ## 3. Branching with Priority
 
 Multiple transitions for the same action are evaluated in priority order.
-
+```json
 {
   "name": "Submitted",
   "transitions": [
@@ -75,7 +75,7 @@ Multiple transitions for the same action are evaluated in priority order.
     }
   ]
 }
-
+```
 Behavior:
 - First matching transition wins
 - Higher priority is evaluated first
@@ -86,14 +86,14 @@ Behavior:
 ## 4. Default / Fallback Path
 
 Always include a fallback when appropriate.
-
+```json
 {
   "action": "Evaluate",
   "to": "ManualReview",
   "priority": 1,
   "guards": []
 }
-
+```
 This acts as:
 → “else”
 
@@ -111,13 +111,13 @@ Context is a flat map with namespaces:
 - calc.* → derived values
 
 Example:
-
+```json
 {
   "type": "GreaterThan",
   "path": "rec.order_total",
   "value": 10000
 }
-
+```
 Guidelines:
 - Always reference full paths
 - Keep naming consistent
@@ -130,23 +130,23 @@ Guidelines:
 Use history-aware guards.
 
 OccurredWithin:
-
+```json
 {
   "type": "OccurredWithin",
   "target_action": "FraudCheck",
   "window_seconds": 86400
 }
-
+```
 Meaning:
 → FraudCheck happened in last 24h
 
 TimeElapsed:
-
+```json
 {
   "type": "TimeElapsed",
   "seconds": 300
 }
-
+```
 Meaning:
 → At least 5 minutes since last transition
 
@@ -155,7 +155,7 @@ Meaning:
 ## 7. Effects (Side Effects)
 
 Effects represent intent, not execution.
-
+```json
 {
   "effects": [
     {
@@ -168,7 +168,7 @@ Effects represent intent, not execution.
     }
   ]
 }
-
+```
 Rules:
 - Effects are emitted, not executed
 - Host system handles them
@@ -179,7 +179,7 @@ Rules:
 ## 8. Saga Pattern (Transient States)
 
 If a transition has effects, it MUST go to a transient state.
-
+```json
 {
   "name": "PendingPayment",
   "is_transient": true,
@@ -201,7 +201,7 @@ If a transition has effects, it MUST go to a transient state.
     }
   ]
 }
-
+```
 Pattern:
 1. Trigger effect
 2. Move to transient state
@@ -215,7 +215,7 @@ Pattern:
 ## 9. Auto Transitions
 
 Use AUTO_TICK for automatic transitions.
-
+```json
 {
   "action": "AUTO_TICK",
   "to": "Escalated",
@@ -223,7 +223,7 @@ Use AUTO_TICK for automatic transitions.
     { "type": "TimeElapsed", "seconds": 3600 }
   ]
 }
-
+```
 Rules:
 - No external trigger
 - Must be acyclic
@@ -234,7 +234,7 @@ Rules:
 ## 10. Migration Example
 
 Used when upgrading versions.
-
+```json
 {
   "migration_rules": [
     {
@@ -256,7 +256,7 @@ Used when upgrading versions.
     }
   ]
 }
-
+```
 ---
 
 ## 11. How VPE Evaluates Your Law

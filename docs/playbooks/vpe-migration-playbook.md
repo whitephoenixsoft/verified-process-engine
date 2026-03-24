@@ -115,6 +115,7 @@ A successful lift returns:
 
 Example (conceptual):
 
+```json
 {
   "new_state": "AwaitingPayment",
   "context": {
@@ -127,7 +128,7 @@ Example (conceptual):
     "to_version": "2.0.0"
   }
 }
-
+```
 ---
 
 ## 6. Host Responsibilities
