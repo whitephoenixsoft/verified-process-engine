@@ -1,0 +1,16 @@
+[package]
+name = "vpe-ffi"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+authors.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+vpe = { path = "../vpe" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+

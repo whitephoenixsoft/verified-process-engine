@@ -1,0 +1,14 @@
+[package]
+name = "vpe-cli"
+edition.workspace = true
+license.workspace = true
+version.workspace = true
+authors.workspace = true
+
+[dependencies]
+vpe = { path = "../vpe" }
+clap.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+
