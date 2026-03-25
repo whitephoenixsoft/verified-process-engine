@@ -1,5 +1,6 @@
 use crate::compiler::compiled::CompiledProcess;
 use crate::compiler::digest::compute_digest;
+use crate::compiler::manifest::build_manifests;
 use crate::compiler::source::LawSource;
 use crate::compiler::validate::validate_law;
 use crate::error::VpeError;
@@ -18,6 +19,12 @@ pub struct CompilationResult {
 }
 
 #[derive(Debug, Clone)]
+pub struct ValidationReport {
+    pub process: ProcessRef,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct RegistrationReport {
     pub process: ProcessRef,
     pub digest: String,
@@ -30,9 +37,15 @@ impl VpeCompiler {
         Self { registry }
     }
 
-    pub fn validate(&self, schema: &DomainSchema, law: &LawSource) -> Result<(), VpeError> {
-        validate_law(schema, law, &self.registry)?;
-        Ok(())
+    pub fn validate(
+        &self,
+        schema: &DomainSchema,
+        law: &LawSource,
+    ) -> Result<ValidationReport, VpeError> {
+        let warnings = validate_law(schema, law, &self.registry)?;
+        let process = ProcessRef::new(&law.domain, &law.process, &law.version);
+
+        Ok(ValidationReport { process, warnings })
     }
 
     pub fn compile(
@@ -40,10 +53,10 @@ impl VpeCompiler {
         schema: &DomainSchema,
         law: &LawSource,
     ) -> Result<CompilationResult, VpeError> {
-        self.validate(schema, law)?;
+        let validation = self.validate(schema, law)?;
 
         let process_ref = ProcessRef::new(&law.domain, &law.process, &law.version);
-        let manifests = HashMap::<String, StateManifest>::new();
+        let manifests = build_manifests(law);
         let digest = compute_digest(law)?;
 
         let process = CompiledProcess::new(process_ref.clone(), digest.clone(), manifests.clone());
@@ -51,7 +64,7 @@ impl VpeCompiler {
             process: process_ref,
             digest,
             manifests,
-            warnings: vec![],
+            warnings: validation.warnings,
         };
 
         Ok(CompilationResult { process, report })

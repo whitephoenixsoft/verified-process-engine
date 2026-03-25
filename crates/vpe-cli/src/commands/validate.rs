@@ -8,8 +8,19 @@ pub fn run(schema_path: &str, law_path: &str) -> Result<(), Box<dyn std::error::
 
     let registry = GuardRegistry::builder().with_builtins().build()?;
     let compiler = VpeCompiler::with_registry(registry);
-    compiler.validate(&schema, &law)?;
+    let report = compiler.validate(&schema, &law)?;
 
-    println!(r#"{{"success":true,"data":{{}},"warnings":[],"errors":[]}}"#);
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "success": true,
+            "data": {
+                "process": report.process,
+            },
+            "warnings": report.warnings,
+            "errors": [],
+        }))?
+    );
+
     Ok(())
 }
