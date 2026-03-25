@@ -61,7 +61,7 @@ mod tests {
     use crate::registry::GuardRegistryBuilder;
     use crate::schema::{DomainSchema, FieldDefinition, SchemaFieldType};
     use crate::compiler::source::{GuardSource, StateSource, TransitionSource};
-    use serde_json::json;
+    use std::collections::BTreeMap;
 
     fn schema() -> DomainSchema {
         DomainSchema {
@@ -98,7 +98,7 @@ mod tests {
                         priority: 0,
                         guards: vec![GuardSource {
                             guard_type: "Default".into(),
-                            params: json!({}),
+                            params: BTreeMap::new(),
                         }],
                         effects: vec![],
                         comment: None,

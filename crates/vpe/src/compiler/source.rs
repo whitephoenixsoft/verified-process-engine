@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LawSource {
@@ -31,6 +32,7 @@ pub struct TransitionSource {
     pub guards: Vec<GuardSource>,
     #[serde(default)]
     pub effects: Vec<EffectSource>,
+    #[serde(default)]
     pub comment: Option<String>,
 }
 
@@ -39,7 +41,7 @@ pub struct GuardSource {
     #[serde(rename = "type")]
     pub guard_type: String,
     #[serde(flatten)]
-    pub params: Value,
+    pub params: BTreeMap<String, Value>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
