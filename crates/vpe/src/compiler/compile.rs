@@ -2,7 +2,7 @@ use crate::compiler::compiled::CompiledProcess;
 use crate::compiler::digest::compute_digest;
 use crate::compiler::source::LawSource;
 use crate::compiler::validate::validate_law;
-use crate::error::{CompileError, VpeError};
+use crate::error::VpeError;
 use crate::registry::GuardRegistry;
 use crate::schema::DomainSchema;
 use crate::types::{ProcessRef, StateManifest};
@@ -31,8 +31,7 @@ impl VpeCompiler {
     }
 
     pub fn validate(&self, schema: &DomainSchema, law: &LawSource) -> Result<(), VpeError> {
-        let _ = &self.registry;
-        validate_law(schema, law)?;
+        validate_law(schema, law, &self.registry)?;
         Ok(())
     }
 

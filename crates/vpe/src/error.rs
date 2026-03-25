@@ -37,6 +37,15 @@ pub enum CompileError {
 
     #[error("unresolved reference: {0}")]
     UnresolvedReference(String),
+
+    #[error("duplicate state: {0}")]
+    DuplicateState(String),
+
+    #[error("initial state not found: {0}")]
+    InitialStateNotFound(String),
+
+    #[error("unknown transition target state: {0}")]
+    UnknownTargetState(String),
 }
 
 #[derive(Debug, Error)]
