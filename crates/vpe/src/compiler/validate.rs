@@ -1,7 +1,8 @@
-use crate::compiler::source::LawSource;
+use serde_json::Value;
+use crate::compiler::source::{GuardSource, LawSource};
 use crate::error::{CompileError, SchemaError};
 use crate::registry::GuardRegistry;
-use crate::schema::{validate_schema, DomainSchema};
+use crate::schema::{validate_schema, DomainSchema, SchemaFieldType};
 use std::collections::{HashSet, VecDeque};
 
 pub fn validate_law(
@@ -46,6 +47,8 @@ pub fn validate_law(
                         guard.guard_type.clone(),
                     ));
                 }
+
+                validate_guard_source(schema, guard)?;
             }
         }
 
@@ -57,6 +60,52 @@ pub fn validate_law(
     warnings.extend(find_unreachable_states(law));
 
     Ok(warnings)
+}
+
+fn validate_guard_source(
+    schema: &DomainSchema,
+    guard: &GuardSource,
+) -> Result<(), CompileError> {
+    match guard.guard_type.as_str() {
+        "Default" => Ok(()),
+        "GreaterThan" => validate_greater_than_guard(schema, guard),
+        _ => Ok(()),
+    }
+}
+
+fn validate_greater_than_guard(
+    schema: &DomainSchema,
+    guard: &GuardSource,
+) -> Result<(), CompileError> {
+    let path = guard
+        .params
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| CompileError::InvalidLaw("GreaterThan requires string field 'path'".into()))?;
+
+    let value = guard
+        .params
+        .get("value")
+        .ok_or_else(|| CompileError::InvalidLaw("GreaterThan requires field 'value'".into()))?;
+
+    let field_type = schema
+        .resolve_path_type(path)
+        .ok_or_else(|| CompileError::UnresolvedReference(format!("unknown field path '{path}'")))?;
+
+    match field_type {
+        SchemaFieldType::Number => {
+            if value.is_number() {
+                Ok(())
+            } else {
+                Err(CompileError::TypeMismatch(format!(
+                    "GreaterThan on '{path}' requires numeric value"
+                )))
+            }
+        }
+        _ => Err(CompileError::TypeMismatch(format!(
+            "GreaterThan requires a numeric field, but '{path}' is not numeric"
+        ))),
+    }
 }
 
 fn find_unreachable_states(law: &LawSource) -> Vec<String> {
@@ -97,7 +146,7 @@ mod tests {
     use crate::compiler::source::{GuardSource, StateSource, TransitionSource};
     use crate::registry::{GuardRegistry, GuardRegistryBuilder};
     use crate::schema::{DomainSchema, FieldDefinition, SchemaFieldType};
-    use serde_json::Value;
+    use serde_json::{json, Value};
     use std::collections::BTreeMap;
 
     fn schema() -> DomainSchema {
@@ -214,5 +263,62 @@ mod tests {
 
         let result = validate_law(&schema(), &law, &registry()).unwrap();
         assert!(result.iter().any(|w| w.contains("unreachable")));
+    }
+
+    #[test]
+    fn rejects_greater_than_with_missing_path() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "GreaterThan".into(),
+            params: BTreeMap::from([("value".into(), json!(100))]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::InvalidLaw(_))));
+    }
+
+    #[test]
+    fn rejects_greater_than_with_unknown_field() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "GreaterThan".into(),
+            params: BTreeMap::from([
+                ("path".into(), json!("rec.missing_field")),
+                ("value".into(), json!(100)),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::UnresolvedReference(_))));
+    }
+
+    #[test]
+    fn rejects_greater_than_with_wrong_value_type() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "GreaterThan".into(),
+            params: BTreeMap::from([
+                ("path".into(), json!("rec.amount")),
+                ("value".into(), json!("not-a-number")),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::TypeMismatch(_))));
+    }
+
+    #[test]
+    fn validates_greater_than_with_number_field() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "GreaterThan".into(),
+            params: BTreeMap::from([
+                ("path".into(), json!("rec.amount")),
+                ("value".into(), json!(100)),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(result.is_ok());
     }
 }
