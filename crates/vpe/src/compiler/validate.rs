@@ -1,8 +1,8 @@
-use serde_json::Value;
 use crate::compiler::source::{GuardSource, LawSource};
 use crate::error::{CompileError, SchemaError};
 use crate::registry::GuardRegistry;
 use crate::schema::{validate_schema, DomainSchema, SchemaFieldType};
+use serde_json::Value;
 use std::collections::{HashSet, VecDeque};
 
 pub fn validate_law(
@@ -69,6 +69,9 @@ fn validate_guard_source(
     match guard.guard_type.as_str() {
         "Default" => Ok(()),
         "GreaterThan" => validate_greater_than_guard(schema, guard),
+        "Equals" => validate_equals_guard(schema, guard),
+        "OccurredWithin" => validate_occurred_within_guard(guard),
+        "TimeElapsed" => validate_time_elapsed_guard(guard),
         _ => Ok(()),
     }
 }
@@ -105,6 +108,79 @@ fn validate_greater_than_guard(
         _ => Err(CompileError::TypeMismatch(format!(
             "GreaterThan requires a numeric field, but '{path}' is not numeric"
         ))),
+    }
+}
+
+fn validate_equals_guard(
+    schema: &DomainSchema,
+    guard: &GuardSource,
+) -> Result<(), CompileError> {
+    let path = guard
+        .params
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| CompileError::InvalidLaw("Equals requires string field 'path'".into()))?;
+
+    let value = guard
+        .params
+        .get("value")
+        .ok_or_else(|| CompileError::InvalidLaw("Equals requires field 'value'".into()))?;
+
+    let field_type = schema
+        .resolve_path_type(path)
+        .ok_or_else(|| CompileError::UnresolvedReference(format!("unknown field path '{path}'")))?;
+
+    if value_matches_type(field_type, value) {
+        Ok(())
+    } else {
+        Err(CompileError::TypeMismatch(format!(
+            "Equals on '{path}' received value incompatible with field type"
+        )))
+    }
+}
+
+fn validate_occurred_within_guard(guard: &GuardSource) -> Result<(), CompileError> {
+    let target_action = guard.params.get("target_action").and_then(Value::as_str);
+    let window_seconds = guard.params.get("window_seconds").and_then(Value::as_u64);
+
+    if target_action.is_none() {
+        return Err(CompileError::InvalidLaw(
+            "OccurredWithin requires string field 'target_action'".into(),
+        ));
+    }
+
+    if window_seconds.is_none() {
+        return Err(CompileError::InvalidLaw(
+            "OccurredWithin requires numeric field 'window_seconds'".into(),
+        ));
+    }
+
+    Ok(())
+}
+
+fn validate_time_elapsed_guard(guard: &GuardSource) -> Result<(), CompileError> {
+    let seconds = guard.params.get("seconds").and_then(Value::as_u64);
+
+    if seconds.is_none() {
+        return Err(CompileError::InvalidLaw(
+            "TimeElapsed requires numeric field 'seconds'".into(),
+        ));
+    }
+
+    Ok(())
+}
+
+fn value_matches_type(field_type: &SchemaFieldType, value: &Value) -> bool {
+    match field_type {
+        SchemaFieldType::String => value.is_string(),
+        SchemaFieldType::Number => value.is_number(),
+        SchemaFieldType::Boolean => value.is_boolean(),
+        SchemaFieldType::DateTime => value.is_number(),
+        SchemaFieldType::Duration => value.is_number(),
+        SchemaFieldType::Enum(options) => value
+            .as_str()
+            .map(|s| options.iter().any(|o| o == s))
+            .unwrap_or(false),
     }
 }
 
@@ -153,11 +229,18 @@ mod tests {
         DomainSchema {
             domain: "TestDomain".into(),
             version: "1.0.0".into(),
-            fields: vec![FieldDefinition {
-                name: "amount".into(),
-                field_type: SchemaFieldType::Number,
-                description: None,
-            }],
+            fields: vec![
+                FieldDefinition {
+                    name: "amount".into(),
+                    field_type: SchemaFieldType::Number,
+                    description: None,
+                },
+                FieldDefinition {
+                    name: "status".into(),
+                    field_type: SchemaFieldType::String,
+                    description: None,
+                },
+            ],
         }
     }
 
@@ -315,6 +398,132 @@ mod tests {
             params: BTreeMap::from([
                 ("path".into(), json!("rec.amount")),
                 ("value".into(), json!(100)),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn rejects_equals_with_missing_path() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "Equals".into(),
+            params: BTreeMap::from([("value".into(), json!(100))]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::InvalidLaw(_))));
+    }
+
+    #[test]
+    fn rejects_equals_with_unknown_field() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "Equals".into(),
+            params: BTreeMap::from([
+                ("path".into(), json!("rec.unknown")),
+                ("value".into(), json!(100)),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::UnresolvedReference(_))));
+    }
+
+    #[test]
+    fn rejects_equals_with_wrong_type() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "Equals".into(),
+            params: BTreeMap::from([
+                ("path".into(), json!("rec.amount")),
+                ("value".into(), json!("wrong")),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::TypeMismatch(_))));
+    }
+
+    #[test]
+    fn validates_equals_with_matching_type() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "Equals".into(),
+            params: BTreeMap::from([
+                ("path".into(), json!("rec.amount")),
+                ("value".into(), json!(100)),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn rejects_occurred_within_without_target_action() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "OccurredWithin".into(),
+            params: BTreeMap::from([
+                ("window_seconds".into(), json!(3600)),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::InvalidLaw(_))));
+    }
+
+    #[test]
+    fn rejects_occurred_within_without_window_seconds() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "OccurredWithin".into(),
+            params: BTreeMap::from([
+                ("target_action".into(), json!("FraudCheck")),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::InvalidLaw(_))));
+    }
+
+    #[test]
+    fn validates_occurred_within() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "OccurredWithin".into(),
+            params: BTreeMap::from([
+                ("target_action".into(), json!("FraudCheck")),
+                ("window_seconds".into(), json!(3600)),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn rejects_time_elapsed_without_seconds() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "TimeElapsed".into(),
+            params: BTreeMap::new(),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::InvalidLaw(_))));
+    }
+
+    #[test]
+    fn validates_time_elapsed() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "TimeElapsed".into(),
+            params: BTreeMap::from([
+                ("seconds".into(), json!(300)),
             ]),
         };
 
