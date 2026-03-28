@@ -17,11 +17,16 @@ pub fn evaluate(
         }));
     }
 
-    let node = process
-        .nodes()
-        .iter()
-        .find(|n| n.name == request.current_state)
-        .ok_or_else(|| VpeError::Runtime(RuntimeError::UnknownState(request.current_state.clone())))?;
+    
+    let state_idx = process
+        .state_index(&request.current_state)
+        .ok_or_else(|| {
+            VpeError::Runtime(RuntimeError::UnknownState(
+                request.current_state.clone(),
+            ))
+    })?;
+
+    let node = &process.nodes()[state_idx];
     
     // Manifest validation
     let manifest = process

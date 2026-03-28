@@ -109,13 +109,14 @@ impl VpeCompiler {
                 transitions,
             });
         }
-
+        
         let process = CompiledProcess::new(
             process_ref.clone(),
             digest.clone(),
             manifests.clone(),
             initial_state_idx,
             nodes,
+            state_to_idx, // NEW
         );
 
         let report = RegistrationReport {

@@ -10,6 +10,7 @@ pub struct CompiledProcess {
     manifests: HashMap<String, StateManifest>,
     initial_state_idx: usize,
     nodes: Vec<Node>,
+    state_index: HashMap<String, usize>,
 }
 
 #[derive(Debug)]
@@ -33,7 +34,8 @@ impl CompiledProcess {
         digest: String,
         manifests: HashMap<String, StateManifest>,
         initial_state_idx: usize,
-        nodes: Vec<Node>,
+        nodes: Vec<Node>, 
+            state_index: HashMap<String, usize>,
     ) -> Self {
         Self {
             process_ref,
@@ -41,6 +43,7 @@ impl CompiledProcess {
             manifests,
             initial_state_idx,
             nodes,
+                state_index,
         }
     }
 
@@ -62,5 +65,9 @@ impl CompiledProcess {
 
     pub fn nodes(&self) -> &[Node] {
         &self.nodes
+    }
+    
+    pub fn state_index(&self, state: &str) -> Option<usize> {
+        self.state_index.get(state).copied()
     }
 }
