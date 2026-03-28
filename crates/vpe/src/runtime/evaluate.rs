@@ -22,6 +22,24 @@ pub fn evaluate(
         .iter()
         .find(|n| n.name == request.current_state)
         .ok_or_else(|| VpeError::Runtime(RuntimeError::UnknownState(request.current_state.clone())))?;
+    
+    // Manifest validation
+    let manifest = process
+        .manifest(&node.name)
+        .ok_or_else(|| VpeError::Runtime(RuntimeError::UnknownState(node.name.clone())))?;
+    
+    for required in &manifest.context_requirements {
+        match required {
+            crate::types::ContextRequirement::Field(field)
+            | crate::types::ContextRequirement::SystemField(field) => {
+                if !request.context.contains_key(field) {
+                    return Err(VpeError::Runtime(RuntimeError::MissingContextField {
+                        field: field.clone(),
+                    }));
+                }
+            }
+        }
+    }
 
     let candidates: Vec<&Edge> = node
         .transitions
@@ -252,6 +270,37 @@ mod tests {
         assert!(matches!(
             err,
             VpeError::Runtime(RuntimeError::NoTransitionFound { .. })
+        ));
+    }
+    
+    #[test]
+    fn evaluate_fails_when_required_context_missing() {
+        let compiled = compiler().compile(&schema(), &law()).unwrap().process;
+    
+        // Build request WITHOUT rec.amount
+        let mut context = ContextMap::new();
+        context.insert("sys.now".into(), json!(1_700_000_100_i64));
+    
+        let anchor_event = anchor("Draft");
+    
+        let req = VpeRequest {
+            process: ProcessRef::new("TestDomain", "TestProcess", "1.0.0"),
+            trace_id: "trace-1".into(),
+            now: 1_700_000_100,
+            current_state: "Draft".into(),
+            action: "Submit".into(),
+            context,
+            chronicle: ChronicleView {
+                anchor: anchor_event.clone(),
+                events: vec![anchor_event],
+            },
+        };
+    
+        let err = evaluate(&compiled, &req).unwrap_err();
+    
+        assert!(matches!(
+            err,
+            VpeError::Runtime(RuntimeError::MissingContextField { .. })
         ));
     }
 }

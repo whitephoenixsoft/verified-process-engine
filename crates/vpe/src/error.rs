@@ -58,6 +58,9 @@ pub enum RuntimeError {
 
     #[error("no transition found from state '{state}' for action '{action}'")]
     NoTransitionFound { state: String, action: String },
+    
+    #[error("missing required context field: {field}")]
+    MissingContextField { field: String },
 
     #[error("unknown state: {0}")]
     UnknownState(String),
