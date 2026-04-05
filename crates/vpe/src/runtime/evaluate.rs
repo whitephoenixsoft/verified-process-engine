@@ -24,7 +24,7 @@ pub fn evaluate(
     let mut auto_depth = 0usize;
     let mut accumulated_effects = Vec::new();
     let mut emitted_events = Vec::new();
-    let mut previous_state_for_verdict = request.current_state.clone();
+    let previous_state_for_verdict = request.current_state.clone();
 
     loop {
         let state_idx = process
@@ -409,7 +409,8 @@ mod tests {
     #[test]
     fn evaluate_auto_ticks_into_next_state_when_guard_passes() {
         let compiled = compiler().compile(&schema(), &law_with_auto_tick()).unwrap().process;
-        let req = request("Draft", "Submit", 150.0);
+        let mut req = request("Draft", "Submit", 150.0);
+        req.context.insert("sys.now".into(), json!(1_700_000_400_i64));
 
         let verdict = evaluate(&compiled, &req).unwrap();
 
