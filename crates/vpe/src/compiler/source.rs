@@ -2,6 +2,13 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum EffectMode {
+    Tracked,
+    Untracked,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LawSource {
     pub domain: String,
@@ -52,6 +59,8 @@ pub struct EffectSource {
     pub action: Option<String>,
     #[serde(default)]
     pub params: Option<Value>,
+    #[serde(default)]
+    pub mode: Option<EffectMode>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

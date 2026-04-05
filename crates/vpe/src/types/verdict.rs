@@ -8,6 +8,14 @@ pub struct VpeEffect {
     pub target: Option<String>,
     pub action: Option<String>,
     pub params: Map<String, Value>,
+    pub mode: VpeEffectMode,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum VpeEffectMode {
+    Tracked,
+    Untracked,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -8,6 +8,6 @@ pub use crate::schema::{DomainSchema, LawSource};
 pub use crate::types::{
     ChronicleView, ContextMap, ContextRequirement, GuardRequirements, HistoryRequirement,
     PlannedEvent, ProcessRef, StateManifest, VpeEffect, VpeEvent, VpeEventKind, VpeRequest,
-    VpeVerdict,
+    VpeVerdict, VpeEffectMode
 };
 pub use crate::Guard;

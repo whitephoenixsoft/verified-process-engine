@@ -2,14 +2,14 @@
 use crate::compiler::compiled::{CompiledProcess, Edge, Node};
 use crate::compiler::digest::compute_digest;
 use crate::compiler::manifest::build_manifests;
-use crate::compiler::source::{EffectSource, LawSource};
 use crate::compiler::validate::validate_law;
 use crate::error::{CompileError, VpeError};
 use crate::registry::GuardRegistry;
 use crate::schema::DomainSchema;
-use crate::types::{ProcessRef, StateManifest, VpeEffect};
 use serde_json::{Map, Value};
 use std::collections::HashMap;
+use crate::compiler::source::{EffectMode, EffectSource, LawSource};
+use crate::types::{ProcessRef, StateManifest, VpeEffect, VpeEffectMode};
 
 pub struct VpeCompiler {
     registry: GuardRegistry,
@@ -149,11 +149,17 @@ fn compile_effect(effect: &EffectSource) -> VpeEffect {
         Some(_) | None => Map::new(),
     };
 
+    let mode = match effect.mode.clone().unwrap_or(EffectMode::Untracked) {
+        EffectMode::Tracked => VpeEffectMode::Tracked,
+        EffectMode::Untracked => VpeEffectMode::Untracked,
+    };
+
     VpeEffect {
         effect_type: effect.effect_type.clone(),
         target: effect.target.clone(),
         action: effect.action.clone(),
         params,
+        mode,
     }
 }
 
@@ -224,6 +230,7 @@ mod tests {
                                 target: Some("Email".into()),
                                 action: Some("Send".into()),
                                 params: Some(json!({ "template": "approved" })),
+                                mode: None,
                             }],
                             comment: None,
                         },
@@ -288,5 +295,6 @@ mod tests {
         assert_eq!(effect.target.as_deref(), Some("Email"));
         assert_eq!(effect.action.as_deref(), Some("Send"));
         assert_eq!(effect.params.get("template").and_then(|v| v.as_str()), Some("approved"));
+        assert_eq!(effect.mode, crate::types::VpeEffectMode::Untracked);
     }
 }
