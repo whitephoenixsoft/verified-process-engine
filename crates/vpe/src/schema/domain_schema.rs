@@ -1,3 +1,4 @@
+
 use crate::schema::types::{FieldDefinition, SchemaFieldType};
 use serde::{Deserialize, Serialize};
 
@@ -5,7 +6,17 @@ use serde::{Deserialize, Serialize};
 pub struct DomainSchema {
     pub domain: String,
     pub version: String,
-    pub fields: Vec<FieldDefinition>,
+    pub namespaces: SchemaNamespaces,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SchemaNamespaces {
+    #[serde(default)]
+    pub rec: Vec<FieldDefinition>,
+    #[serde(default)]
+    pub ext: Vec<FieldDefinition>,
+    #[serde(default)]
+    pub calc: Vec<FieldDefinition>,
 }
 
 impl DomainSchema {
@@ -13,13 +24,34 @@ impl DomainSchema {
         let (namespace, field_name) = path.split_once('.')?;
 
         match namespace {
-            "rec" | "ext" | "calc" => self
-                .fields
+            "rec" => self
+                .namespaces
+                .rec
                 .iter()
                 .find(|f| f.name == field_name)
                 .map(|f| &f.field_type),
-            "sys" => None,
+            "ext" => self
+                .namespaces
+                .ext
+                .iter()
+                .find(|f| f.name == field_name)
+                .map(|f| &f.field_type),
+            "calc" => self
+                .namespaces
+                .calc
+                .iter()
+                .find(|f| f.name == field_name)
+                .map(|f| &f.field_type),
+            "sys" => resolve_system_path_type(field_name),
             _ => None,
         }
+    }
+}
+
+fn resolve_system_path_type(field_name: &str) -> Option<&'static SchemaFieldType> {
+    match field_name {
+        "now" => Some(&SchemaFieldType::DateTime),
+        "trace_id" => Some(&SchemaFieldType::String),
+        _ => None,
     }
 }

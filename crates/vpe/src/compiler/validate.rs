@@ -11,7 +11,21 @@ pub fn validate_law(
     registry: &GuardRegistry,
 ) -> Result<Vec<String>, CompileError> {
     validate_schema(schema).map_err(map_schema_error)?;
+    
+    if law.domain != schema.domain {
+        return Err(CompileError::InvalidLaw(format!(
+            "law domain '{}' does not match schema domain '{}'",
+            law.domain, schema.domain
+        )));
+    }
 
+    if law.schema_version != schema.version {
+        return Err(CompileError::InvalidLaw(format!(
+            "law schema_version '{}' does not match schema version '{}'",
+            law.schema_version, schema.version
+        )));
+    }
+    
     if law.states.is_empty() {
         return Err(CompileError::InvalidLaw(
             "law must contain at least one state".into(),
@@ -472,23 +486,36 @@ mod tests {
     use crate::schema::{DomainSchema, FieldDefinition, SchemaFieldType};
     use serde_json::{json, Value};
     use std::collections::BTreeMap;
-
+    
     fn schema() -> DomainSchema {
         DomainSchema {
             domain: "TestDomain".into(),
             version: "1.0.0".into(),
-            fields: vec![
-                FieldDefinition {
-                    name: "amount".into(),
-                    field_type: SchemaFieldType::Number,
-                    description: None,
-                },
-                FieldDefinition {
-                    name: "status".into(),
-                    field_type: SchemaFieldType::String,
-                    description: None,
-                },
-            ],
+            namespaces: crate::schema::SchemaNamespaces {
+                rec: vec![
+                    FieldDefinition {
+                        name: "amount".into(),
+                        field_type: SchemaFieldType::Number,
+                        description: None,
+                        enum_values: None,
+                    },
+                    FieldDefinition {
+                        name: "status".into(),
+                        field_type: SchemaFieldType::String,
+                        description: None,
+                        enum_values: None,
+                    },
+                ],
+                ext: vec![
+                    FieldDefinition {
+                        name: "status".into(),
+                        field_type: SchemaFieldType::String,
+                        description: None,
+                        enum_values: None,
+                    },
+                ],
+                calc: vec![],
+            },
         }
     }
 
@@ -502,6 +529,7 @@ mod tests {
     fn valid_law() -> LawSource {
         LawSource {
             domain: "TestDomain".into(),
+            schema_version: "1.0.0".into(),
             process: "TestProcess".into(),
             version: "1.0.0".into(),
             initial_state: "Draft".into(),
@@ -528,25 +556,6 @@ mod tests {
                 },
             ],
             migration_rules: vec![],
-        }
-    }
-
-    fn schema_with_ext_status() -> DomainSchema {
-        DomainSchema {
-            domain: "TestDomain".into(),
-            version: "1.0.0".into(),
-            fields: vec![
-                FieldDefinition {
-                    name: "amount".into(),
-                    field_type: SchemaFieldType::Number,
-                    description: None,
-                },
-                FieldDefinition {
-                    name: "status".into(),
-                    field_type: SchemaFieldType::String,
-                    description: None,
-                },
-            ],
         }
     }
 
@@ -1354,5 +1363,36 @@ mod tests {
 
         let result = validate_law(&schema(), &law, &registry());
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn rejects_law_with_mismatched_domain() {
+        let mut law = valid_law();
+        law.domain = "OtherDomain".into();
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::InvalidLaw(_))));
+    }
+
+    #[test]
+    fn rejects_law_with_mismatched_schema_version() {
+        let mut law = valid_law();
+        law.schema_version = "2.0.0".into();
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::InvalidLaw(_))));
+    }
+
+    #[test]
+    fn resolves_builtin_system_schema_fields() {
+        let schema = schema();
+        assert!(matches!(
+            schema.resolve_path_type("sys.now"),
+            Some(crate::schema::SchemaFieldType::DateTime)
+        ));
+        assert!(matches!(
+            schema.resolve_path_type("sys.trace_id"),
+            Some(crate::schema::SchemaFieldType::String)
+        ));
     }
 }

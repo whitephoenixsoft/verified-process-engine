@@ -195,6 +195,7 @@ mod tests {
     fn law_with_priorities() -> LawSource {
         LawSource {
             domain: "TestDomain".into(),
+            schema_version: "1.0.0".into(),
             process: "TestProcess".into(),
             version: "1.0.0".into(),
             initial_state: "Draft".into(),

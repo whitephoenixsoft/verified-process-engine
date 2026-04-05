@@ -18,6 +18,7 @@ pub struct LawSource {
     pub states: Vec<StateSource>,
     #[serde(default)]
     pub migration_rules: Vec<MigrationRuleSource>,
+    pub schema_version: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -84,6 +84,7 @@ mod tests {
     fn builds_manifest_for_each_state() {
         let law = LawSource {
             domain: "TestDomain".into(),
+            schema_version: "1.0.0".into(),
             process: "TestProcess".into(),
             version: "1.0.0".into(),
             initial_state: "Draft".into(),
@@ -113,6 +114,7 @@ mod tests {
     fn always_includes_last_transition_requirement() {
         let law = LawSource {
             domain: "TestDomain".into(),
+            schema_version: "1.0.0".into(),
             process: "TestProcess".into(),
             version: "1.0.0".into(),
             initial_state: "Draft".into(),
@@ -137,6 +139,7 @@ mod tests {
     fn includes_context_requirement_for_greater_than_guard() {
         let law = LawSource {
             domain: "TestDomain".into(),
+            schema_version: "1.0.0".into(),
             process: "TestProcess".into(),
             version: "1.0.0".into(),
             initial_state: "Draft".into(),
@@ -180,6 +183,7 @@ mod tests {
     fn includes_context_requirement_for_equals_guard() {
         let law = LawSource {
             domain: "TestDomain".into(),
+            schema_version: "1.0.0".into(),
             process: "TestProcess".into(),
             version: "1.0.0".into(),
             initial_state: "Draft".into(),
@@ -223,6 +227,7 @@ mod tests {
     fn includes_history_requirement_for_occurred_within_guard() {
         let law = LawSource {
             domain: "TestDomain".into(),
+            schema_version: "1.0.0".into(),
             process: "TestProcess".into(),
             version: "1.0.0".into(),
             initial_state: "Draft".into(),
@@ -269,6 +274,7 @@ mod tests {
     fn time_elapsed_does_not_duplicate_last_transition_requirement() {
         let law = LawSource {
             domain: "TestDomain".into(),
+            schema_version: "1.0.0".into(),
             process: "TestProcess".into(),
             version: "1.0.0".into(),
             initial_state: "Draft".into(),
@@ -313,6 +319,7 @@ mod tests {
     fn includes_both_context_requirements_for_fields_equal_guard() {
         let law = LawSource {
             domain: "TestDomain".into(),
+            schema_version: "1.0.0".into(),
             process: "TestProcess".into(),
             version: "1.0.0".into(),
             initial_state: "Draft".into(),
@@ -360,6 +367,7 @@ mod tests {
     fn includes_context_requirement_for_exists_guard() {
         let law = LawSource {
             domain: "TestDomain".into(),
+            schema_version: "1.0.0".into(),
             process: "TestProcess".into(),
             version: "1.0.0".into(),
             initial_state: "Draft".into(),
@@ -402,6 +410,7 @@ mod tests {
     fn includes_context_requirement_for_in_set_guard() {
         let law = LawSource {
             domain: "TestDomain".into(),
+            schema_version: "1.0.0".into(),
             process: "TestProcess".into(),
             version: "1.0.0".into(),
             initial_state: "Draft".into(),

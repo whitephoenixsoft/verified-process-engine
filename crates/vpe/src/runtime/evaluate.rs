@@ -178,6 +178,7 @@ mod tests {
     fn law() -> LawSource {
         LawSource {
             domain: "TestDomain".into(),
+            schema_version: "1.0.0".into(),
             process: "TestProcess".into(),
             version: "1.0.0".into(),
             initial_state: "Draft".into(),
@@ -266,6 +267,7 @@ mod tests {
     fn law_with_auto_tick() -> LawSource {
         LawSource {
             domain: "TestDomain".into(),
+            schema_version: "1.0.0".into(),
             process: "TestProcess".into(),
             version: "1.0.0".into(),
             initial_state: "Draft".into(),
