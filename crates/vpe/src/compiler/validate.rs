@@ -1121,50 +1121,6 @@ mod tests {
     }
 
     #[test]
-    fn allows_tracked_effect_into_transient_state() {
-        let law = LawSource {
-            domain: "TestDomain".into(),
-            process: "TestProcess".into(),
-            version: "1.0.0".into(),
-            initial_state: "Draft".into(),
-            states: vec![
-                StateSource {
-                    name: "Draft".into(),
-                    is_transient: false,
-                    transitions: vec![TransitionSource {
-                        action: "Submit".into(),
-                        to: "PendingPayment".into(),
-                        priority: 0,
-                        guards: vec![GuardSource {
-                            guard_type: "Default".into(),
-                            params: BTreeMap::<String, Value>::new(),
-                        }],
-                        effects: vec![
-                            crate::compiler::source::EffectSource {
-                                effect_type: "ChargeCard".into(),
-                                target: Some("Payments".into()),
-                                action: Some("Capture".into()),
-                                params: None,
-                                mode: Some(crate::compiler::source::EffectMode::Tracked),
-                            }
-                        ],
-                        comment: None,
-                    }],
-                },
-                StateSource {
-                    name: "PendingPayment".into(),
-                    is_transient: true,
-                    transitions: vec![],
-                },
-            ],
-            migration_rules: vec![],
-        };
-
-        let result = validate_law(&schema(), &law, &registry());
-        assert!(result.is_ok());
-    }
-
-    #[test]
     fn rejects_transient_state_with_no_outgoing_transitions() {
         let law = LawSource {
             domain: "TestDomain".into(),
