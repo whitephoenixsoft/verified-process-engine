@@ -77,12 +77,27 @@ pub fn evaluate(
             }
         }
 
-        let transition = matched.ok_or_else(|| {
-            VpeError::Runtime(RuntimeError::NoTransitionFound {
-                state: current_state.clone(),
-                action: current_action.clone(),
-            })
-        })?;
+        let transition = match matched {
+            Some(transition) => transition,
+            None => {
+                if current_action == "AUTO_TICK" {
+                    return Ok(VpeVerdict {
+                        process: request.process.clone(),
+                        trace_id: request.trace_id.clone(),
+                        previous_state: previous_state_for_verdict,
+                        next_state: current_state,
+                        state_patch: Default::default(),
+                        effects: accumulated_effects,
+                        emitted_events,
+                    });
+                }
+
+                return Err(VpeError::Runtime(RuntimeError::NoTransitionFound {
+                    state: current_state.clone(),
+                    action: current_action.clone(),
+                }));
+            }
+        };
 
         let next_state = process.nodes()[transition.target_idx].name.clone();
 
