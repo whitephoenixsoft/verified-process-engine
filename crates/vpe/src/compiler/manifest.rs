@@ -20,6 +20,21 @@ pub fn build_manifests(law: &LawSource) -> HashMap<String, StateManifest> {
                             }
                         }
                     }
+                    "FieldsEqual" => {
+                        if let Some(left_path) = guard.params.get("left_path").and_then(|v| v.as_str()) {
+                            let req = ContextRequirement::Field(left_path.to_string());
+                            if !context_requirements.contains(&req) {
+                                context_requirements.push(req);
+                            }
+                        }
+
+                        if let Some(right_path) = guard.params.get("right_path").and_then(|v| v.as_str()) {
+                            let req = ContextRequirement::Field(right_path.to_string());
+                            if !context_requirements.contains(&req) {
+                                context_requirements.push(req);
+                            }
+                        }
+                    }
                     "OccurredWithin" => {
                         let target_action = guard.params.get("target_action").and_then(|v| v.as_str());
                         let window_seconds = guard.params.get("window_seconds").and_then(|v| v.as_u64());
@@ -292,5 +307,52 @@ mod tests {
             .count();
 
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn includes_both_context_requirements_for_fields_equal_guard() {
+        let law = LawSource {
+            domain: "TestDomain".into(),
+            process: "TestProcess".into(),
+            version: "1.0.0".into(),
+            initial_state: "Draft".into(),
+            states: vec![
+                StateSource {
+                    name: "Draft".into(),
+                    is_transient: false,
+                    transitions: vec![TransitionSource {
+                        action: "Submit".into(),
+                        to: "Approved".into(),
+                        priority: 0,
+                        guards: vec![GuardSource {
+                            guard_type: "FieldsEqual".into(),
+                            params: BTreeMap::from([
+                                ("left_path".into(), json!("rec.status")),
+                                ("right_path".into(), json!("ext.status")),
+                            ]),
+                        }],
+                        effects: vec![],
+                        comment: None,
+                    }],
+                },
+                StateSource {
+                    name: "Approved".into(),
+                    is_transient: false,
+                    transitions: vec![],
+                },
+            ],
+            migration_rules: vec![],
+        };
+
+        let manifests = build_manifests(&law);
+        let manifest = manifests.get("Draft").unwrap();
+
+        assert!(manifest
+            .context_requirements
+            .contains(&ContextRequirement::Field("rec.status".into())));
+
+        assert!(manifest
+            .context_requirements
+            .contains(&ContextRequirement::Field("ext.status".into())));
     }
 }

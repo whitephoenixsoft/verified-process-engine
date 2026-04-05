@@ -128,6 +128,35 @@ impl Guard for TimeElapsedGuard {
     }
 }
 
+#[derive(Debug)]
+struct FieldsEqualGuard {
+    left_path: String,
+    right_path: String,
+}
+
+impl Guard for FieldsEqualGuard {
+    fn check(&self, context: &ContextMap, _history: &[VpeEvent]) -> bool {
+        match (context.get(&self.left_path), context.get(&self.right_path)) {
+            (Some(left), Some(right)) => left == right,
+            _ => false,
+        }
+    }
+
+    fn requirements(&self) -> GuardRequirements {
+        GuardRequirements {
+            history: vec![],
+            context: vec![
+                ContextRequirement::Field(self.left_path.clone()),
+                ContextRequirement::Field(self.right_path.clone()),
+            ],
+        }
+    }
+
+    fn name(&self) -> &'static str {
+        "FieldsEqual"
+    }
+}
+
 pub fn register_builtins(builder: &mut GuardRegistryBuilder) {
     let default_factory: GuardFactory =
         Arc::new(|_params: &Value| -> Result<Box<dyn Guard>, VpeError> {
@@ -206,4 +235,29 @@ pub fn register_builtins(builder: &mut GuardRegistryBuilder) {
             Ok(Box::new(TimeElapsedGuard { seconds }))
         });
     builder.register_guard("TimeElapsed", elapsed_factory);
+
+    let fields_equal_factory: GuardFactory =
+        Arc::new(|params: &Value| -> Result<Box<dyn Guard>, VpeError> {
+            let left_path = params
+                .get("left_path")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    VpeError::Unsupported("FieldsEqual requires string field 'left_path'".into())
+                })?
+                .to_string();
+
+            let right_path = params
+                .get("right_path")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| {
+                    VpeError::Unsupported("FieldsEqual requires string field 'right_path'".into())
+                })?
+                .to_string();
+
+            Ok(Box::new(FieldsEqualGuard {
+                left_path,
+                right_path,
+            }))
+        });
+    builder.register_guard("FieldsEqual", fields_equal_factory);
 }

@@ -72,7 +72,41 @@ fn validate_guard_source(
         "Equals" => validate_equals_guard(schema, guard),
         "OccurredWithin" => validate_occurred_within_guard(guard),
         "TimeElapsed" => validate_time_elapsed_guard(guard),
+        "FieldsEqual" => validate_fields_equal_guard(schema, guard),
         _ => Ok(()),
+    }
+}
+
+fn validate_fields_equal_guard(
+    schema: &DomainSchema,
+    guard: &GuardSource,
+) -> Result<(), CompileError> {
+    let left_path = guard
+        .params
+        .get("left_path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| CompileError::InvalidLaw("FieldsEqual requires string field 'left_path'".into()))?;
+
+    let right_path = guard
+        .params
+        .get("right_path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| CompileError::InvalidLaw("FieldsEqual requires string field 'right_path'".into()))?;
+
+    let left_type = schema
+        .resolve_path_type(left_path)
+        .ok_or_else(|| CompileError::UnresolvedReference(format!("unknown field path '{left_path}'")))?;
+
+    let right_type = schema
+        .resolve_path_type(right_path)
+        .ok_or_else(|| CompileError::UnresolvedReference(format!("unknown field path '{right_path}'")))?;
+
+    if field_types_compatible(left_type, right_type) {
+        Ok(())
+    } else {
+        Err(CompileError::TypeMismatch(format!(
+            "FieldsEqual requires compatible field types, but '{left_path}' and '{right_path}' differ"
+        )))
     }
 }
 
@@ -184,6 +218,18 @@ fn value_matches_type(field_type: &SchemaFieldType, value: &Value) -> bool {
     }
 }
 
+fn field_types_compatible(left: &SchemaFieldType, right: &SchemaFieldType) -> bool {
+    match (left, right) {
+        (SchemaFieldType::String, SchemaFieldType::String) => true,
+        (SchemaFieldType::Number, SchemaFieldType::Number) => true,
+        (SchemaFieldType::Boolean, SchemaFieldType::Boolean) => true,
+        (SchemaFieldType::DateTime, SchemaFieldType::DateTime) => true,
+        (SchemaFieldType::Duration, SchemaFieldType::Duration) => true,
+        (SchemaFieldType::Enum(a), SchemaFieldType::Enum(b)) => a == b,
+        _ => false,
+    }
+}
+
 fn find_unreachable_states(law: &LawSource) -> Vec<String> {
     let mut warnings = Vec::new();
     let mut visited = HashSet::new();
@@ -252,6 +298,57 @@ mod tests {
     }
 
     fn valid_law() -> LawSource {
+        LawSource {
+            domain: "TestDomain".into(),
+            process: "TestProcess".into(),
+            version: "1.0.0".into(),
+            initial_state: "Draft".into(),
+            states: vec![
+                StateSource {
+                    name: "Draft".into(),
+                    is_transient: false,
+                    transitions: vec![TransitionSource {
+                        action: "Submit".into(),
+                        to: "Approved".into(),
+                        priority: 0,
+                        guards: vec![GuardSource {
+                            guard_type: "Default".into(),
+                            params: BTreeMap::<String, Value>::new(),
+                        }],
+                        effects: vec![],
+                        comment: None,
+                    }],
+                },
+                StateSource {
+                    name: "Approved".into(),
+                    is_transient: false,
+                    transitions: vec![],
+                },
+            ],
+            migration_rules: vec![],
+        }
+    }
+
+    fn schema_with_ext_status() -> DomainSchema {
+        DomainSchema {
+            domain: "TestDomain".into(),
+            version: "1.0.0".into(),
+            fields: vec![
+                FieldDefinition {
+                    name: "amount".into(),
+                    field_type: SchemaFieldType::Number,
+                    description: None,
+                },
+                FieldDefinition {
+                    name: "status".into(),
+                    field_type: SchemaFieldType::String,
+                    description: None,
+                },
+            ],
+        }
+    }
+
+    fn valid_law_with_status_comparison() -> LawSource {
         LawSource {
             domain: "TestDomain".into(),
             process: "TestProcess".into(),
@@ -528,6 +625,94 @@ mod tests {
         };
 
         let result = validate_law(&schema(), &law, &registry());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn rejects_fields_equal_without_left_path() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "FieldsEqual".into(),
+            params: BTreeMap::from([
+                ("right_path".into(), json!("rec.status")),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::InvalidLaw(_))));
+    }
+
+    #[test]
+    fn rejects_fields_equal_without_right_path() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "FieldsEqual".into(),
+            params: BTreeMap::from([
+                ("left_path".into(), json!("rec.status")),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::InvalidLaw(_))));
+    }
+
+    #[test]
+    fn rejects_fields_equal_with_unknown_left_path() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "FieldsEqual".into(),
+            params: BTreeMap::from([
+                ("left_path".into(), json!("rec.unknown")),
+                ("right_path".into(), json!("rec.status")),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::UnresolvedReference(_))));
+    }
+
+    #[test]
+    fn rejects_fields_equal_with_unknown_right_path() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "FieldsEqual".into(),
+            params: BTreeMap::from([
+                ("left_path".into(), json!("rec.status")),
+                ("right_path".into(), json!("rec.unknown")),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::UnresolvedReference(_))));
+    }
+
+    #[test]
+    fn rejects_fields_equal_with_incompatible_types() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "FieldsEqual".into(),
+            params: BTreeMap::from([
+                ("left_path".into(), json!("rec.amount")),
+                ("right_path".into(), json!("rec.status")),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::TypeMismatch(_))));
+    }
+
+    #[test]
+    fn validates_fields_equal_with_compatible_types() {
+        let mut law = valid_law_with_status_comparison();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "FieldsEqual".into(),
+            params: BTreeMap::from([
+                ("left_path".into(), json!("rec.status")),
+                ("right_path".into(), json!("ext.status")),
+            ]),
+        };
+
+        let result = validate_law(&schema_with_ext_status(), &law, &registry());
         assert!(result.is_ok());
     }
 }
