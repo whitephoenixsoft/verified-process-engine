@@ -168,7 +168,7 @@ mod tests {
     use super::*;
     use crate::compiler::source::{EffectSource, GuardSource, StateSource, TransitionSource};
     use crate::registry::GuardRegistryBuilder;
-    use crate::schema::{DomainSchema, FieldDefinition, SchemaFieldType};
+    use crate::schema::{DomainSchema, FieldDefinition, SchemaFieldType, SchemaNamespaces};
     use serde_json::{json, Value};
     use std::collections::BTreeMap;
 
@@ -176,11 +176,16 @@ mod tests {
         DomainSchema {
             domain: "TestDomain".into(),
             version: "1.0.0".into(),
-            fields: vec![FieldDefinition {
-                name: "amount".into(),
-                field_type: SchemaFieldType::Number,
-                description: None,
-            }],
+            namespaces: SchemaNamespaces { 
+                rec: vec![FieldDefinition {
+                    name: "amount".into(),
+                    field_type: SchemaFieldType::Number,
+                    description: None,
+                    enum_values: None,
+                }],
+                ext: vec![],
+                calc: vec![],
+            }
         }
     }
 

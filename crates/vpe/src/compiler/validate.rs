@@ -427,9 +427,9 @@ fn value_matches_type(field_type: &SchemaFieldType, value: &Value) -> bool {
         SchemaFieldType::Boolean => value.is_boolean(),
         SchemaFieldType::DateTime => value.is_number(),
         SchemaFieldType::Duration => value.is_number(),
-        SchemaFieldType::Enum(options) => value
+        SchemaFieldType::Enum => value
             .as_str()
-            .map(|s| options.iter().any(|o| o == s))
+            .map(|s| enum_values.iter().any(|o| o == s))
             .unwrap_or(false),
     }
 }
@@ -441,7 +441,7 @@ fn field_types_compatible(left: &SchemaFieldType, right: &SchemaFieldType) -> bo
         (SchemaFieldType::Boolean, SchemaFieldType::Boolean) => true,
         (SchemaFieldType::DateTime, SchemaFieldType::DateTime) => true,
         (SchemaFieldType::Duration, SchemaFieldType::Duration) => true,
-        (SchemaFieldType::Enum(a), SchemaFieldType::Enum(b)) => a == b,
+        (SchemaFieldType::Enum, SchemaFieldType::Enum) => true,
         _ => false,
     }
 }
@@ -562,6 +562,7 @@ mod tests {
     fn valid_law_with_status_comparison() -> LawSource {
         LawSource {
             domain: "TestDomain".into(),
+            schema_version: "1.0.0".into(),
             process: "TestProcess".into(),
             version: "1.0.0".into(),
             initial_state: "Draft".into(),
@@ -923,7 +924,7 @@ mod tests {
             ]),
         };
 
-        let result = validate_law(&schema_with_ext_status(), &law, &registry());
+        let result = validate_law(&schema(), &law, &registry());
         assert!(result.is_ok());
     }
 
@@ -1133,6 +1134,7 @@ mod tests {
     fn rejects_transient_state_with_no_outgoing_transitions() {
         let law = LawSource {
             domain: "TestDomain".into(),
+            schema_version: "1.0.0".into(),
             process: "TestProcess".into(),
             version: "1.0.0".into(),
             initial_state: "Draft".into(),
@@ -1169,6 +1171,7 @@ mod tests {
     fn rejects_tracked_effect_targeting_transient_state_with_no_exits() {
         let law = LawSource {
             domain: "TestDomain".into(),
+            schema_version: "1.0.0".into(),
             process: "TestProcess".into(),
             version: "1.0.0".into(),
             initial_state: "Draft".into(),
@@ -1213,6 +1216,7 @@ mod tests {
     fn allows_tracked_effect_targeting_transient_state_with_exit() {
         let law = LawSource {
             domain: "TestDomain".into(),
+            schema_version: "1.0.0".into(),
             process: "TestProcess".into(),
             version: "1.0.0".into(),
             initial_state: "Draft".into(),
@@ -1272,6 +1276,7 @@ mod tests {
     fn rejects_auto_tick_cycle() {
         let law = LawSource {
             domain: "TestDomain".into(),
+            schema_version: "1.0.0".into(),
             process: "TestProcess".into(),
             version: "1.0.0".into(),
             initial_state: "A".into(),
@@ -1318,6 +1323,7 @@ mod tests {
     fn allows_acyclic_auto_tick_chain() {
         let law = LawSource {
             domain: "TestDomain".into(),
+            schema_version: "1.0.0".into(),
             process: "TestProcess".into(),
             version: "1.0.0".into(),
             initial_state: "A".into(),
