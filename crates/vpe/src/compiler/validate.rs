@@ -54,6 +54,8 @@ pub fn validate_law(
             }
         }
 
+        validate_transient_states(law)?;
+        
         if state.transitions.is_empty() {
             warnings.push(format!("state '{}' is terminal", state.name));
         }
@@ -62,6 +64,44 @@ pub fn validate_law(
     warnings.extend(find_unreachable_states(law));
 
     Ok(warnings)
+}
+
+fn validate_transient_states(law: &LawSource) -> Result<(), CompileError> {
+    for state in &law.states {
+        if state.is_transient && state.transitions.is_empty() {
+            return Err(CompileError::InvalidLaw(format!(
+                "transient state '{}' must define at least one outgoing transition",
+                state.name
+            )));
+        }
+    }
+
+    for state in &law.states {
+        for transition in &state.transitions {
+            let has_tracked_effect = transition.effects.iter().any(|effect| {
+                matches!(effect.mode.clone().unwrap_or(EffectMode::Untracked), EffectMode::Tracked)
+            });
+
+            if !has_tracked_effect {
+                continue;
+            }
+
+            let target_state = law
+                .states
+                .iter()
+                .find(|s| s.name == transition.to)
+                .ok_or_else(|| CompileError::UnknownTargetState(transition.to.clone()))?;
+
+            if target_state.transitions.is_empty() {
+                return Err(CompileError::InvalidLaw(format!(
+                    "tracked effect transition targets transient state '{}' but it has no exits",
+                    target_state.name
+                )));
+            }
+        }
+    }
+
+    Ok(())
 }
 
 fn validate_transition_effects(
@@ -1052,6 +1092,145 @@ mod tests {
                 StateSource {
                     name: "PendingPayment".into(),
                     is_transient: true,
+                    transitions: vec![],
+                },
+            ],
+            migration_rules: vec![],
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn rejects_transient_state_with_no_outgoing_transitions() {
+        let law = LawSource {
+            domain: "TestDomain".into(),
+            process: "TestProcess".into(),
+            version: "1.0.0".into(),
+            initial_state: "Draft".into(),
+            states: vec![
+                StateSource {
+                    name: "Draft".into(),
+                    is_transient: false,
+                    transitions: vec![TransitionSource {
+                        action: "Submit".into(),
+                        to: "PendingPayment".into(),
+                        priority: 0,
+                        guards: vec![GuardSource {
+                            guard_type: "Default".into(),
+                            params: BTreeMap::<String, Value>::new(),
+                        }],
+                        effects: vec![],
+                        comment: None,
+                    }],
+                },
+                StateSource {
+                    name: "PendingPayment".into(),
+                    is_transient: true,
+                    transitions: vec![],
+                },
+            ],
+            migration_rules: vec![],
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::InvalidLaw(_))));
+    }
+
+    #[test]
+    fn rejects_tracked_effect_targeting_transient_state_with_no_exits() {
+        let law = LawSource {
+            domain: "TestDomain".into(),
+            process: "TestProcess".into(),
+            version: "1.0.0".into(),
+            initial_state: "Draft".into(),
+            states: vec![
+                StateSource {
+                    name: "Draft".into(),
+                    is_transient: false,
+                    transitions: vec![TransitionSource {
+                        action: "Submit".into(),
+                        to: "PendingPayment".into(),
+                        priority: 0,
+                        guards: vec![GuardSource {
+                            guard_type: "Default".into(),
+                            params: BTreeMap::<String, Value>::new(),
+                        }],
+                        effects: vec![
+                            crate::compiler::source::EffectSource {
+                                effect_type: "ChargeCard".into(),
+                                target: Some("Payments".into()),
+                                action: Some("Capture".into()),
+                                params: None,
+                                mode: Some(crate::compiler::source::EffectMode::Tracked),
+                            }
+                        ],
+                        comment: None,
+                    }],
+                },
+                StateSource {
+                    name: "PendingPayment".into(),
+                    is_transient: true,
+                    transitions: vec![],
+                },
+            ],
+            migration_rules: vec![],
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::InvalidLaw(_))));
+    }
+
+    #[test]
+    fn allows_tracked_effect_targeting_transient_state_with_exit() {
+        let law = LawSource {
+            domain: "TestDomain".into(),
+            process: "TestProcess".into(),
+            version: "1.0.0".into(),
+            initial_state: "Draft".into(),
+            states: vec![
+                StateSource {
+                    name: "Draft".into(),
+                    is_transient: false,
+                    transitions: vec![TransitionSource {
+                        action: "Submit".into(),
+                        to: "PendingPayment".into(),
+                        priority: 0,
+                        guards: vec![GuardSource {
+                            guard_type: "Default".into(),
+                            params: BTreeMap::<String, Value>::new(),
+                        }],
+                        effects: vec![
+                            crate::compiler::source::EffectSource {
+                                effect_type: "ChargeCard".into(),
+                                target: Some("Payments".into()),
+                                action: Some("Capture".into()),
+                                params: None,
+                                mode: Some(crate::compiler::source::EffectMode::Tracked),
+                            }
+                        ],
+                        comment: None,
+                    }],
+                },
+                StateSource {
+                    name: "PendingPayment".into(),
+                    is_transient: true,
+                    transitions: vec![TransitionSource {
+                        action: "PaymentSucceeded".into(),
+                        to: "Approved".into(),
+                        priority: 0,
+                        guards: vec![GuardSource {
+                            guard_type: "Default".into(),
+                            params: BTreeMap::<String, Value>::new(),
+                        }],
+                        effects: vec![],
+                        comment: None,
+                    }],
+                },
+                StateSource {
+                    name: "Approved".into(),
+                    is_transient: false,
                     transitions: vec![],
                 },
             ],
