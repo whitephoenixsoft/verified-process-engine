@@ -12,7 +12,7 @@ pub fn build_manifests(law: &LawSource) -> HashMap<String, StateManifest> {
         for transition in &state.transitions {
             for guard in &transition.guards {
                 match guard.guard_type.as_str() {
-                    "GreaterThan" | "Equals" => {
+                    "GreaterThan" | "Equals" | "Exists" | "MissingField" | "InSet" | "NotInSet" => {
                         if let Some(path) = guard.params.get("path").and_then(|v| v.as_str()) {
                             let req = ContextRequirement::Field(path.to_string());
                             if !context_requirements.contains(&req) {
@@ -354,5 +354,90 @@ mod tests {
         assert!(manifest
             .context_requirements
             .contains(&ContextRequirement::Field("ext.status".into())));
+    }
+
+    #[test]
+    fn includes_context_requirement_for_exists_guard() {
+        let law = LawSource {
+            domain: "TestDomain".into(),
+            process: "TestProcess".into(),
+            version: "1.0.0".into(),
+            initial_state: "Draft".into(),
+            states: vec![
+                StateSource {
+                    name: "Draft".into(),
+                    is_transient: false,
+                    transitions: vec![TransitionSource {
+                        action: "Submit".into(),
+                        to: "Approved".into(),
+                        priority: 0,
+                        guards: vec![GuardSource {
+                            guard_type: "Exists".into(),
+                            params: BTreeMap::from([
+                                ("path".into(), json!("rec.status")),
+                            ]),
+                        }],
+                        effects: vec![],
+                        comment: None,
+                    }],
+                },
+                StateSource {
+                    name: "Approved".into(),
+                    is_transient: false,
+                    transitions: vec![],
+                },
+            ],
+            migration_rules: vec![],
+        };
+
+        let manifests = build_manifests(&law);
+        let manifest = manifests.get("Draft").unwrap();
+
+        assert!(manifest
+            .context_requirements
+            .contains(&ContextRequirement::Field("rec.status".into())));
+    }
+
+    #[test]
+    fn includes_context_requirement_for_in_set_guard() {
+        let law = LawSource {
+            domain: "TestDomain".into(),
+            process: "TestProcess".into(),
+            version: "1.0.0".into(),
+            initial_state: "Draft".into(),
+            states: vec![
+                StateSource {
+                    name: "Draft".into(),
+                    is_transient: false,
+                    transitions: vec![TransitionSource {
+                        action: "Submit".into(),
+                        to: "Approved".into(),
+                        priority: 0,
+                        guards: vec![GuardSource {
+                            guard_type: "InSet".into(),
+                            params: BTreeMap::from([
+                                ("path".into(), json!("rec.status")),
+                                ("values".into(), json!(["Draft", "Review"])),
+                            ]),
+                        }],
+                        effects: vec![],
+                        comment: None,
+                    }],
+                },
+                StateSource {
+                    name: "Approved".into(),
+                    is_transient: false,
+                    transitions: vec![],
+                },
+            ],
+            migration_rules: vec![],
+        };
+
+        let manifests = build_manifests(&law);
+        let manifest = manifests.get("Draft").unwrap();
+
+        assert!(manifest
+            .context_requirements
+            .contains(&ContextRequirement::Field("rec.status".into())));
     }
 }

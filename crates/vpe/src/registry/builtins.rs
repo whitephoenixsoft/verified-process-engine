@@ -157,6 +157,102 @@ impl Guard for FieldsEqualGuard {
     }
 }
 
+#[derive(Debug)]
+struct ExistsGuard {
+    path: String,
+}
+
+impl Guard for ExistsGuard {
+    fn check(&self, context: &ContextMap, _history: &[VpeEvent]) -> bool {
+        context.get(&self.path).map(|v| !v.is_null()).unwrap_or(false)
+    }
+
+    fn requirements(&self) -> GuardRequirements {
+        GuardRequirements {
+            history: vec![],
+            context: vec![ContextRequirement::Field(self.path.clone())],
+        }
+    }
+
+    fn name(&self) -> &'static str {
+        "Exists"
+    }
+}
+
+#[derive(Debug)]
+struct MissingFieldGuard {
+    path: String,
+}
+
+impl Guard for MissingFieldGuard {
+    fn check(&self, context: &ContextMap, _history: &[VpeEvent]) -> bool {
+        context.get(&self.path).map(|v| v.is_null()).unwrap_or(true)
+    }
+
+    fn requirements(&self) -> GuardRequirements {
+        GuardRequirements {
+            history: vec![],
+            context: vec![ContextRequirement::Field(self.path.clone())],
+        }
+    }
+
+    fn name(&self) -> &'static str {
+        "MissingField"
+    }
+}
+
+#[derive(Debug)]
+struct InSetGuard {
+    path: String,
+    values: Vec<Value>,
+}
+
+impl Guard for InSetGuard {
+    fn check(&self, context: &ContextMap, _history: &[VpeEvent]) -> bool {
+        context
+            .get(&self.path)
+            .map(|actual| self.values.iter().any(|candidate| candidate == actual))
+            .unwrap_or(false)
+    }
+
+    fn requirements(&self) -> GuardRequirements {
+        GuardRequirements {
+            history: vec![],
+            context: vec![ContextRequirement::Field(self.path.clone())],
+        }
+    }
+
+    fn name(&self) -> &'static str {
+        "InSet"
+    }
+}
+
+#[derive(Debug)]
+struct NotInSetGuard {
+    path: String,
+    values: Vec<Value>,
+}
+
+impl Guard for NotInSetGuard {
+    fn check(&self, context: &ContextMap, _history: &[VpeEvent]) -> bool {
+        context
+            .get(&self.path)
+            .map(|actual| self.values.iter().all(|candidate| candidate != actual))
+            .unwrap_or(true)
+    }
+
+    fn requirements(&self) -> GuardRequirements {
+        GuardRequirements {
+            history: vec![],
+            context: vec![ContextRequirement::Field(self.path.clone())],
+        }
+    }
+
+    fn name(&self) -> &'static str {
+        "NotInSet"
+    }
+}
+
 pub fn register_builtins(builder: &mut GuardRegistryBuilder) {
     let default_factory: GuardFactory =
         Arc::new(|_params: &Value| -> Result<Box<dyn Guard>, VpeError> {
@@ -260,4 +356,66 @@ pub fn register_builtins(builder: &mut GuardRegistryBuilder) {
             }))
         });
     builder.register_guard("FieldsEqual", fields_equal_factory);
+
+Inside register_builtins(), add:
+
+    let exists_factory: GuardFactory =
+        Arc::new(|params: &Value| -> Result<Box<dyn Guard>, VpeError> {
+            let path = params
+                .get("path")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| VpeError::Unsupported("Exists requires string field 'path'".into()))?
+                .to_string();
+
+            Ok(Box::new(ExistsGuard { path }))
+        });
+    builder.register_guard("Exists", exists_factory);
+
+    let missing_factory: GuardFactory =
+        Arc::new(|params: &Value| -> Result<Box<dyn Guard>, VpeError> {
+            let path = params
+                .get("path")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| VpeError::Unsupported("MissingField requires string field 'path'".into()))?
+                .to_string();
+
+            Ok(Box::new(MissingFieldGuard { path }))
+        });
+    builder.register_guard("MissingField", missing_factory);
+
+    let in_set_factory: GuardFactory =
+        Arc::new(|params: &Value| -> Result<Box<dyn Guard>, VpeError> {
+            let path = params
+                .get("path")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| VpeError::Unsupported("InSet requires string field 'path'".into()))?
+                .to_string();
+
+            let values = params
+                .get("values")
+                .and_then(|v| v.as_array())
+                .ok_or_else(|| VpeError::Unsupported("InSet requires array field 'values'".into()))?
+                .clone();
+
+            Ok(Box::new(InSetGuard { path, values }))
+        });
+    builder.register_guard("InSet", in_set_factory);
+
+    let not_in_set_factory: GuardFactory =
+        Arc::new(|params: &Value| -> Result<Box<dyn Guard>, VpeError> {
+            let path = params
+                .get("path")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| VpeError::Unsupported("NotInSet requires string field 'path'".into()))?
+                .to_string();
+
+            let values = params
+                .get("values")
+                .and_then(|v| v.as_array())
+                .ok_or_else(|| VpeError::Unsupported("NotInSet requires array field 'values'".into()))?
+                .clone();
+
+            Ok(Box::new(NotInSetGuard { path, values }))
+        });
+    builder.register_guard("NotInSet", not_in_set_factory);
 }

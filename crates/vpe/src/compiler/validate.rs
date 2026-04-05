@@ -73,8 +73,77 @@ fn validate_guard_source(
         "OccurredWithin" => validate_occurred_within_guard(guard),
         "TimeElapsed" => validate_time_elapsed_guard(guard),
         "FieldsEqual" => validate_fields_equal_guard(schema, guard),
+        "Exists" => validate_exists_guard(schema, guard),
+        "MissingField" => validate_missing_field_guard(schema, guard),
+        "InSet" => validate_in_set_guard(schema, guard),
+        "NotInSet" => validate_in_set_guard(schema, guard),
         _ => Ok(()),
     }
+}
+
+fn validate_exists_guard(
+    schema: &DomainSchema,
+    guard: &GuardSource,
+) -> Result<(), CompileError> {
+    let path = guard
+        .params
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| CompileError::InvalidLaw("Exists requires string field 'path'".into()))?;
+
+    schema
+        .resolve_path_type(path)
+        .ok_or_else(|| CompileError::UnresolvedReference(format!("unknown field path '{path}'")))?;
+
+    Ok(())
+}
+
+fn validate_missing_field_guard(
+    schema: &DomainSchema,
+    guard: &GuardSource,
+) -> Result<(), CompileError> {
+    let path = guard
+        .params
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| CompileError::InvalidLaw("MissingField requires string field 'path'".into()))?;
+
+    schema
+        .resolve_path_type(path)
+        .ok_or_else(|| CompileError::UnresolvedReference(format!("unknown field path '{path}'")))?;
+
+    Ok(())
+}
+
+fn validate_in_set_guard(
+    schema: &DomainSchema,
+    guard: &GuardSource,
+) -> Result<(), CompileError> {
+    let path = guard
+        .params
+        .get("path")
+        .and_then(Value::as_str)
+        .ok_or_else(|| CompileError::InvalidLaw("InSet/NotInSet requires string field 'path'".into()))?;
+
+    let values = guard
+        .params
+        .get("values")
+        .and_then(Value::as_array)
+        .ok_or_else(|| CompileError::InvalidLaw("InSet/NotInSet requires array field 'values'".into()))?;
+
+    let field_type = schema
+        .resolve_path_type(path)
+        .ok_or_else(|| CompileError::UnresolvedReference(format!("unknown field path '{path}'")))?;
+
+    for value in values {
+        if !value_matches_type(field_type, value) {
+            return Err(CompileError::TypeMismatch(format!(
+                "InSet/NotInSet on '{path}' received value incompatible with field type"
+            )));
+        }
+    }
+
+    Ok(())
 }
 
 fn validate_fields_equal_guard(
@@ -713,6 +782,174 @@ mod tests {
         };
 
         let result = validate_law(&schema_with_ext_status(), &law, &registry());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn rejects_exists_without_path() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "Exists".into(),
+            params: BTreeMap::new(),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::InvalidLaw(_))));
+    }
+
+    #[test]
+    fn rejects_exists_with_unknown_path() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "Exists".into(),
+            params: BTreeMap::from([
+                ("path".into(), json!("rec.unknown")),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::UnresolvedReference(_))));
+    }
+
+    #[test]
+    fn validates_exists_with_known_path() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "Exists".into(),
+            params: BTreeMap::from([
+                ("path".into(), json!("rec.status")),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn rejects_missing_field_without_path() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "MissingField".into(),
+            params: BTreeMap::new(),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::InvalidLaw(_))));
+    }
+
+    #[test]
+    fn rejects_missing_field_with_unknown_path() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "MissingField".into(),
+            params: BTreeMap::from([
+                ("path".into(), json!("rec.unknown")),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::UnresolvedReference(_))));
+    }
+
+    #[test]
+    fn validates_missing_field_with_known_path() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "MissingField".into(),
+            params: BTreeMap::from([
+                ("path".into(), json!("rec.status")),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn rejects_in_set_without_path() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "InSet".into(),
+            params: BTreeMap::from([
+                ("values".into(), json!(["A", "B"])),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::InvalidLaw(_))));
+    }
+
+    #[test]
+    fn rejects_in_set_without_values() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "InSet".into(),
+            params: BTreeMap::from([
+                ("path".into(), json!("rec.status")),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::InvalidLaw(_))));
+    }
+
+    #[test]
+    fn rejects_in_set_with_non_array_values() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "InSet".into(),
+            params: BTreeMap::from([
+                ("path".into(), json!("rec.status")),
+                ("values".into(), json!("not-an-array")),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::InvalidLaw(_))));
+    }
+
+    #[test]
+    fn rejects_in_set_with_type_mismatch_values() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "InSet".into(),
+            params: BTreeMap::from([
+                ("path".into(), json!("rec.status")),
+                ("values".into(), json!(["OK", 123])),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::TypeMismatch(_))));
+    }
+
+    #[test]
+    fn validates_in_set() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "InSet".into(),
+            params: BTreeMap::from([
+                ("path".into(), json!("rec.status")),
+                ("values".into(), json!(["Draft", "Review"])),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn validates_not_in_set() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "NotInSet".into(),
+            params: BTreeMap::from([
+                ("path".into(), json!("rec.status")),
+                ("values".into(), json!(["Draft", "Review"])),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
         assert!(result.is_ok());
     }
 }
