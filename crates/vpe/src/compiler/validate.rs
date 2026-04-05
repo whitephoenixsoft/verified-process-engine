@@ -55,6 +55,7 @@ pub fn validate_law(
         }
 
         validate_transient_states(law)?;
+        validate_auto_tick_structure(law)?;
         
         if state.transitions.is_empty() {
             warnings.push(format!("state '{}' is terminal", state.name));
@@ -64,6 +65,67 @@ pub fn validate_law(
     warnings.extend(find_unreachable_states(law));
 
     Ok(warnings)
+}
+
+fn validate_auto_tick_structure(law: &LawSource) -> Result<(), CompileError> {
+    for state in &law.states {
+        for transition in &state.transitions {
+            let is_auto_tick = transition.action == "AUTO_TICK";
+
+            if is_auto_tick && state.is_transient == false {
+                // allowed for now; no failure
+            }
+
+            if is_auto_tick && transition.priority == 0 {
+                // allowed; compiler already sorts deterministically
+            }
+        }
+    }
+
+    validate_auto_tick_cycles(law)
+}
+
+fn validate_auto_tick_cycles(law: &LawSource) -> Result<(), CompileError> {
+    use std::collections::HashSet;
+
+    fn dfs(
+        law: &LawSource,
+        state_name: &str,
+        visiting: &mut HashSet<String>,
+        visited: &mut HashSet<String>,
+    ) -> Result<(), CompileError> {
+        if visited.contains(state_name) {
+            return Ok(());
+        }
+
+        if !visiting.insert(state_name.to_string()) {
+            return Err(CompileError::InvalidLaw(format!(
+                "AUTO_TICK cycle detected involving state '{}'",
+                state_name
+            )));
+        }
+
+        if let Some(state) = law.states.iter().find(|s| s.name == state_name) {
+            for transition in &state.transitions {
+                if transition.action == "AUTO_TICK" {
+                    dfs(law, &transition.to, visiting, visited)?;
+                }
+            }
+        }
+
+        visiting.remove(state_name);
+        visited.insert(state_name.to_string());
+        Ok(())
+    }
+
+    let mut visited = HashSet::new();
+    let mut visiting = HashSet::new();
+
+    for state in &law.states {
+        dfs(law, &state.name, &mut visiting, &mut visited)?;
+    }
+
+    Ok(())
 }
 
 fn validate_transient_states(law: &LawSource) -> Result<(), CompileError> {
@@ -1059,6 +1121,50 @@ mod tests {
     }
 
     #[test]
+    fn allows_tracked_effect_into_transient_state() {
+        let law = LawSource {
+            domain: "TestDomain".into(),
+            process: "TestProcess".into(),
+            version: "1.0.0".into(),
+            initial_state: "Draft".into(),
+            states: vec![
+                StateSource {
+                    name: "Draft".into(),
+                    is_transient: false,
+                    transitions: vec![TransitionSource {
+                        action: "Submit".into(),
+                        to: "PendingPayment".into(),
+                        priority: 0,
+                        guards: vec![GuardSource {
+                            guard_type: "Default".into(),
+                            params: BTreeMap::<String, Value>::new(),
+                        }],
+                        effects: vec![
+                            crate::compiler::source::EffectSource {
+                                effect_type: "ChargeCard".into(),
+                                target: Some("Payments".into()),
+                                action: Some("Capture".into()),
+                                params: None,
+                                mode: Some(crate::compiler::source::EffectMode::Tracked),
+                            }
+                        ],
+                        comment: None,
+                    }],
+                },
+                StateSource {
+                    name: "PendingPayment".into(),
+                    is_transient: true,
+                    transitions: vec![],
+                },
+            ],
+            migration_rules: vec![],
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(result.is_ok());
+    }
+
+    #[test]
     fn rejects_transient_state_with_no_outgoing_transitions() {
         let law = LawSource {
             domain: "TestDomain".into(),
@@ -1186,6 +1292,103 @@ mod tests {
                 },
                 StateSource {
                     name: "Approved".into(),
+                    is_transient: false,
+                    transitions: vec![],
+                },
+            ],
+            migration_rules: vec![],
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn rejects_auto_tick_cycle() {
+        let law = LawSource {
+            domain: "TestDomain".into(),
+            process: "TestProcess".into(),
+            version: "1.0.0".into(),
+            initial_state: "A".into(),
+            states: vec![
+                StateSource {
+                    name: "A".into(),
+                    is_transient: true,
+                    transitions: vec![TransitionSource {
+                        action: "AUTO_TICK".into(),
+                        to: "B".into(),
+                        priority: 0,
+                        guards: vec![GuardSource {
+                            guard_type: "Default".into(),
+                            params: BTreeMap::<String, Value>::new(),
+                        }],
+                        effects: vec![],
+                        comment: None,
+                    }],
+                },
+                StateSource {
+                    name: "B".into(),
+                    is_transient: true,
+                    transitions: vec![TransitionSource {
+                        action: "AUTO_TICK".into(),
+                        to: "A".into(),
+                        priority: 0,
+                        guards: vec![GuardSource {
+                            guard_type: "Default".into(),
+                            params: BTreeMap::<String, Value>::new(),
+                        }],
+                        effects: vec![],
+                        comment: None,
+                    }],
+                },
+            ],
+            migration_rules: vec![],
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::InvalidLaw(_))));
+    }
+
+    #[test]
+    fn allows_acyclic_auto_tick_chain() {
+        let law = LawSource {
+            domain: "TestDomain".into(),
+            process: "TestProcess".into(),
+            version: "1.0.0".into(),
+            initial_state: "A".into(),
+            states: vec![
+                StateSource {
+                    name: "A".into(),
+                    is_transient: true,
+                    transitions: vec![TransitionSource {
+                        action: "AUTO_TICK".into(),
+                        to: "B".into(),
+                        priority: 0,
+                        guards: vec![GuardSource {
+                            guard_type: "Default".into(),
+                            params: BTreeMap::<String, Value>::new(),
+                        }],
+                        effects: vec![],
+                        comment: None,
+                    }],
+                },
+                StateSource {
+                    name: "B".into(),
+                    is_transient: true,
+                    transitions: vec![TransitionSource {
+                        action: "AUTO_TICK".into(),
+                        to: "C".into(),
+                        priority: 0,
+                        guards: vec![GuardSource {
+                            guard_type: "Default".into(),
+                            params: BTreeMap::<String, Value>::new(),
+                        }],
+                        effects: vec![],
+                        comment: None,
+                    }],
+                },
+                StateSource {
+                    name: "C".into(),
                     is_transient: false,
                     transitions: vec![],
                 },

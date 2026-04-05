@@ -61,6 +61,9 @@ pub enum RuntimeError {
     
     #[error("missing required context field: {field}")]
     MissingContextField { field: String },
+    
+    #[error("maximum auto-transition depth exceeded")]
+    AutoTransitionLimitExceeded,
 
     #[error("unknown state: {0}")]
     UnknownState(String),

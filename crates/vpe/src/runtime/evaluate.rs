@@ -8,6 +8,8 @@ pub fn evaluate(
     process: &CompiledProcess,
     request: &VpeRequest,
 ) -> Result<VpeVerdict, VpeError> {
+    const MAX_AUTO_DEPTH: usize = 32;
+
     let anchor = &request.chronicle.anchor;
 
     if anchor.state_after != request.current_state {
@@ -17,79 +19,110 @@ pub fn evaluate(
         }));
     }
 
-    
-    let state_idx = process
-        .state_index(&request.current_state)
-        .ok_or_else(|| {
-            VpeError::Runtime(RuntimeError::UnknownState(
-                request.current_state.clone(),
-            ))
-    })?;
+    let mut current_state = request.current_state.clone();
+    let mut current_action = request.action.clone();
+    let mut auto_depth = 0usize;
+    let mut accumulated_effects = Vec::new();
+    let mut emitted_events = Vec::new();
+    let mut previous_state_for_verdict = request.current_state.clone();
 
-    let node = &process.nodes()[state_idx];
-    
-    // Manifest validation
-    let manifest = process
-        .manifest(&node.name)
-        .ok_or_else(|| VpeError::Runtime(RuntimeError::UnknownState(node.name.clone())))?;
-    
-    for required in &manifest.context_requirements {
-        match required {
-            crate::types::ContextRequirement::Field(field)
-            | crate::types::ContextRequirement::SystemField(field) => {
-                if !request.context.contains_key(field) {
-                    return Err(VpeError::Runtime(RuntimeError::MissingContextField {
-                        field: field.clone(),
-                    }));
+    loop {
+        let state_idx = process
+            .state_index(&current_state)
+            .ok_or_else(|| VpeError::Runtime(RuntimeError::UnknownState(current_state.clone())))?;
+
+        let node = &process.nodes()[state_idx];
+
+        let manifest = process
+            .manifest(&node.name)
+            .ok_or_else(|| VpeError::Runtime(RuntimeError::UnknownState(node.name.clone())))?;
+
+        for required in &manifest.context_requirements {
+            match required {
+                crate::types::ContextRequirement::Field(field)
+                | crate::types::ContextRequirement::SystemField(field) => {
+                    if !request.context.contains_key(field) {
+                        return Err(VpeError::Runtime(RuntimeError::MissingContextField {
+                            field: field.clone(),
+                        }));
+                    }
                 }
             }
         }
-    }
 
-    let candidates: Vec<&Edge> = node
-        .transitions
-        .iter()
-        .filter(|t| t.action == request.action)
-        .collect();
-
-    if candidates.is_empty() {
-        return Err(VpeError::Runtime(RuntimeError::NoTransitionFound {
-            state: request.current_state.clone(),
-            action: request.action.clone(),
-        }));
-    }
-
-    for transition in candidates {
-        let passed = transition
-            .guards
+        let candidates: Vec<&Edge> = node
+            .transitions
             .iter()
-            .all(|guard| guard.check(&request.context, &request.chronicle.events));
+            .filter(|t| t.action == current_action)
+            .collect();
 
-        if passed {
-            let next_state = process.nodes()[transition.target_idx].name.clone();
+        if candidates.is_empty() {
+            return Err(VpeError::Runtime(RuntimeError::NoTransitionFound {
+                state: current_state,
+                action: current_action,
+            }));
+        }
 
+        let mut matched = None;
+
+        for transition in candidates {
+            let passed = transition
+                .guards
+                .iter()
+                .all(|guard| guard.check(&request.context, &request.chronicle.events));
+
+            if passed {
+                matched = Some(transition);
+                break;
+            }
+        }
+
+        let transition = matched.ok_or_else(|| {
+            VpeError::Runtime(RuntimeError::NoTransitionFound {
+                state: current_state.clone(),
+                action: current_action.clone(),
+            })
+        })?;
+
+        let next_state = process.nodes()[transition.target_idx].name.clone();
+
+        accumulated_effects.extend(transition.effects.clone());
+        emitted_events.push(PlannedEvent {
+            event_kind: VpeEventKind::StateTransition,
+            action: current_action.clone(),
+            state_before: current_state.clone(),
+            state_after: next_state.clone(),
+            metadata: json!({}),
+        });
+
+        current_state = next_state;
+
+        let next_state_idx = process
+            .state_index(&current_state)
+            .ok_or_else(|| VpeError::Runtime(RuntimeError::UnknownState(current_state.clone())))?;
+        let next_node = &process.nodes()[next_state_idx];
+
+        let has_auto_tick = next_node.transitions.iter().any(|t| t.action == "AUTO_TICK");
+
+        if !has_auto_tick {
             return Ok(VpeVerdict {
                 process: request.process.clone(),
                 trace_id: request.trace_id.clone(),
-                previous_state: request.current_state.clone(),
-                next_state: next_state.clone(),
+                previous_state: previous_state_for_verdict,
+                next_state: current_state,
                 state_patch: Default::default(),
-                effects: transition.effects.clone(),
-                emitted_events: vec![PlannedEvent {
-                    event_kind: VpeEventKind::StateTransition,
-                    action: request.action.clone(),
-                    state_before: request.current_state.clone(),
-                    state_after: next_state,
-                    metadata: json!({}),
-                }],
+                effects: accumulated_effects,
+                emitted_events,
             });
         }
-    }
 
-    Err(VpeError::Runtime(RuntimeError::NoTransitionFound {
-        state: request.current_state.clone(),
-        action: request.action.clone(),
-    }))
+        auto_depth += 1;
+        if auto_depth > MAX_AUTO_DEPTH {
+            return Err(VpeError::Runtime(RuntimeError::AutoTransitionLimitExceeded));
+        }
+
+        current_action = "AUTO_TICK".to_string();
+    }
 }
 
 #[cfg(test)]
@@ -214,7 +247,56 @@ mod tests {
             },
         }
     }
-
+    
+    fn law_with_auto_tick() -> LawSource {
+        LawSource {
+            domain: "TestDomain".into(),
+            process: "TestProcess".into(),
+            version: "1.0.0".into(),
+            initial_state: "Draft".into(),
+            states: vec![
+                StateSource {
+                    name: "Draft".into(),
+                    is_transient: false,
+                    transitions: vec![TransitionSource {
+                        action: "Submit".into(),
+                        to: "PendingPayment".into(),
+                        priority: 100,
+                        guards: vec![GuardSource {
+                            guard_type: "Default".into(),
+                            params: BTreeMap::<String, Value>::new(),
+                        }],
+                        effects: vec![],
+                        comment: None,
+                    }],
+                },
+                StateSource {
+                    name: "PendingPayment".into(),
+                    is_transient: true,
+                    transitions: vec![TransitionSource {
+                        action: "AUTO_TICK".into(),
+                        to: "PaymentTimeout".into(),
+                        priority: 100,
+                        guards: vec![GuardSource {
+                            guard_type: "TimeElapsed".into(),
+                            params: BTreeMap::from([
+                                ("seconds".into(), json!(300)),
+                            ]),
+                        }],
+                        effects: vec![],
+                        comment: None,
+                    }],
+                },
+                StateSource {
+                    name: "PaymentTimeout".into(),
+                    is_transient: false,
+                    transitions: vec![],
+                },
+            ],
+            migration_rules: vec![],
+        }
+    }
+    
     #[test]
     fn evaluate_takes_highest_priority_matching_transition() {
         let compiled = compiler().compile(&schema(), &law()).unwrap().process;
@@ -307,5 +389,45 @@ mod tests {
             err,
             VpeError::Runtime(RuntimeError::MissingContextField { .. })
         ));
+    }
+    
+    #[test]
+    fn evaluate_auto_ticks_into_next_state_when_guard_passes() {
+        let compiled = compiler().compile(&schema(), &law_with_auto_tick()).unwrap().process;
+        let req = request("Draft", "Submit", 150.0);
+
+        let verdict = evaluate(&compiled, &req).unwrap();
+
+        assert_eq!(verdict.previous_state, "Draft");
+        assert_eq!(verdict.next_state, "PaymentTimeout");
+        assert_eq!(verdict.emitted_events.len(), 2);
+        assert_eq!(verdict.emitted_events[0].state_after, "PendingPayment");
+        assert_eq!(verdict.emitted_events[1].state_after, "PaymentTimeout");
+    }
+
+    #[test]
+    fn evaluate_stops_before_auto_tick_when_guard_does_not_pass() {
+        let compiled = compiler().compile(&schema(), &law_with_auto_tick()).unwrap().process;
+        let mut req = request("Draft", "Submit", 150.0);
+        req.context.insert("sys.now".into(), json!(1_700_000_100_i64));
+        req.chronicle.events[0].timestamp = 1_700_000_000;
+
+        let verdict = evaluate(&compiled, &req).unwrap();
+
+        assert_eq!(verdict.next_state, "PendingPayment");
+        assert_eq!(verdict.emitted_events.len(), 1);
+    }
+
+    #[test]
+    fn evaluate_returns_no_transition_found_when_auto_tick_has_no_matching_guard() {
+        let compiled = compiler().compile(&schema(), &law_with_auto_tick()).unwrap().process;
+        let mut req = request("Draft", "Submit", 150.0);
+        req.context.insert("sys.now".into(), json!(1_700_000_100_i64));
+        req.chronicle.events[0].timestamp = 1_700_000_050;
+
+        let verdict = evaluate(&compiled, &req).unwrap();
+
+        assert_eq!(verdict.next_state, "PendingPayment");
+        assert_eq!(verdict.emitted_events.len(), 1);
     }
 }
