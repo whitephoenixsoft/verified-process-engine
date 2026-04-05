@@ -357,8 +357,6 @@ pub fn register_builtins(builder: &mut GuardRegistryBuilder) {
         });
     builder.register_guard("FieldsEqual", fields_equal_factory);
 
-Inside register_builtins(), add:
-
     let exists_factory: GuardFactory =
         Arc::new(|params: &Value| -> Result<Box<dyn Guard>, VpeError> {
             let path = params
