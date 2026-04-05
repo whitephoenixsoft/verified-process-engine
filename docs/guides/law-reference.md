@@ -1,5 +1,5 @@
 # VPE Law Reference
-Version: Canonical v1
+Version: Canonical v2
 
 ## 1. Overview
 
@@ -23,25 +23,41 @@ Required fields:
 - domain: string  
 - process: string  
 - version: string  
+- schema_version: string  
 - initial_state: string  
 - states: array  
 - migration_rules: array (optional)
 
 Example:
 
-```json
 {
   "domain": "OrderManagement",
   "process": "OrderFlow",
   "version": "1.0.0",
+  "schema_version": "1.0.0",
   "initial_state": "Draft",
   "states": [],
   "migration_rules": []
 }
-```
+
 ---
 
-## 3. State Definition
+## 3. Law and Schema Binding
+
+The Law must explicitly declare:
+
+- `schema_version`
+
+Compiler MUST enforce:
+
+- law.domain == schema.domain
+- law.schema_version == schema.version
+
+No implicit matching or inference is allowed.
+
+---
+
+## 4. State Definition
 
 Fields:
 
@@ -51,22 +67,21 @@ Fields:
 
 Example:
 
-```json
 {
   "name": "PendingPayment",
   "is_transient": true,
   "transitions": []
 }
-```
+
 Constraints:
 
 - State names must be unique
 - All referenced states must exist
-- At least one state must match initial_state
+- initial_state must match one of the states
 
 ---
 
-## 4. Transition Definition
+## 5. Transition Definition
 
 Fields:
 
@@ -75,11 +90,10 @@ Fields:
 - priority: number (optional, default 0)
 - guards: array (optional)
 - effects: array (optional)
-- metadata: object (optional)
+- metadata/comment: object or string (optional)
 
 Example:
 
-```json
 {
   "action": "Submit",
   "to": "Approved",
@@ -87,7 +101,7 @@ Example:
   "guards": [],
   "effects": []
 }
-```
+
 Constraints:
 
 - "to" must reference a valid state
@@ -96,7 +110,7 @@ Constraints:
 
 ---
 
-## 5. Action Semantics
+## 6. Action Semantics
 
 - action is a string identifier
 - "AUTO_TICK" represents automatic transitions
@@ -107,10 +121,11 @@ Rules:
   - require no external action
   - must not form cycles
   - must be bounded
+  - execute automatically while valid
 
 ---
 
-## 6. Guard Definition
+## 7. Guard Definition
 
 Fields:
 
@@ -119,13 +134,12 @@ Fields:
 
 Example:
 
-```json
 {
   "type": "GreaterThan",
   "path": "rec.amount",
   "value": 1000
 }
-```
+
 Constraints:
 
 - type must exist in GuardRegistry
@@ -134,7 +148,7 @@ Constraints:
 
 ---
 
-## 7. Guard Requirements
+## 8. Guard Requirements
 
 Each guard declares:
 
@@ -148,24 +162,23 @@ Compiler guarantees:
 
 ---
 
-## 8. Effect Definition
+## 9. Effect Definition
 
 Effects are structured objects.
 
 Fields:
 
 - type: string (required)
-- mode: string (optional) `[tracked | untracked (default)]`
+- mode: string (optional) `tracked | untracked` (default: untracked)
 - target: string (optional)
 - action: string (optional)
 - params: object (optional)
-- handlers: object (optional)
+- handlers: object (optional, tracked only)
 
 Example:
 
-```json
 {
-  "mode": "trecked",
+  "mode": "tracked",
   "type": "WebHook",
   "target": "Payments",
   "action": "Charge",
@@ -173,29 +186,57 @@ Example:
     "order_id": "rec.order_id"
   }
 }
-```
+
 Constraints:
 
 - effects are not executed by VPE
 - effects must be serializable
-- transitions with effects of mode `tracked` must land in transient states
+- tracked effects must follow saga constraints
 
 ---
 
-## 9. Saga Constraints
+## 10. Effect Classification
 
-If a transition contains `tracked` effects:
+### Tracked Effects
 
-- target state must have is_transient = true
+- influence business correctness
+- require explicit resolution
+
+Rules:
+
+- transitions with tracked effects must land in transient states
+- transient state must define at least one exit path
+- completion must be proven via events
+
+---
+
+### Untracked Effects
+
+- best-effort side effects
+- do not influence correctness
+
+Rules:
+
+- may land in non-transient states
+- do not require outcome events
+- must not introduce hidden dependencies
+
+---
+
+## 11. Saga Constraints
+
+If a transition contains tracked effects:
+
+- target state must have `is_transient = true`
 
 Transient states must:
 
-- define exit transitions
-- include timeout or failure path
+- define at least one exit transition
+- allow forward progression (no dead ends)
 
 ---
 
-## 10. Namespace Rules
+## 12. Namespace Rules
 
 Allowed prefixes:
 
@@ -206,62 +247,66 @@ Allowed prefixes:
 
 Rules:
 
-- sys.* is read-only
+- sys.* is read-only and system-defined
 - rec.* is mutable
 - ext.* is read-only
-- calc.* is derived
+- calc.* is read-only
 
 All paths must:
 
 - use dot notation
 - match identifier rules
-- exist in schema (except sys.*)
+- exist in schema or system schema
 
 ---
 
-## 11. Identifier Rules
+## 13. Identifier Rules
 
 All identifiers must:
 
 - be alphanumeric or underscore
 - not start with a digit
 - use dot notation for paths
+- be case-sensitive
 
-Example valid:
+Examples:
 
-rec.order_total  
-ext.user_id  
+Valid:
+- rec.order_total
+- ext.user_id
 
 Invalid:
-
-rec.order-total  
-rec.123value  
+- rec.order-total
+- rec.123value
 
 ---
 
-## 12. Schema Validation
+## 14. Schema Validation
 
 All rec.*, ext.*, calc.* paths must:
 
 - exist in Domain Schema
 - match declared type
 
+sys.* paths must:
+
+- exist in system schema
+
 Type mismatches cause compilation failure.
 
 ---
 
-## 13. Migration Rules
+## 15. Migration Rules
 
 Structure:
 
-```json
 {
   "from_state": "OldState",
   "to_state": "NewState",
   "guards": [],
   "transforms": []
 }
-```
+
 Fields:
 
 - from_state: string (required)
@@ -271,35 +316,34 @@ Fields:
 
 Constraints:
 
-- to_state must exist in target version
+- to_state must exist in target process
 - guards must be valid
 - transforms must be valid
 
 ---
 
-## 14. Transform Operations
+## 16. Transform Operations
 
 Supported operations:
 
 Move:
 
-```json
 {
   "op": "move",
   "from": "old_field",
   "to": "rec.new_field"
 }
-```
+
 Set:
-```json
+
 {
   "op": "set",
   "target": "rec.flag",
   "value": true
 }
-```
+
 Map:
-```json
+
 {
   "op": "map",
   "target": "rec.priority",
@@ -309,23 +353,23 @@ Map:
     "2": "Medium"
   }
 }
-```
+
 Constraints:
 
-- cannot write to sys.*
+- cannot write to sys.*, ext.*, or calc.*
 - must respect schema types
 
 ---
 
-## 15. Conditional Transforms
+## 17. Conditional Transforms
 
 Structure:
-```json
+
 {
   "guards": [],
   "ops": []
 }
-```
+
 Rules:
 
 - guards evaluated first
@@ -333,13 +377,13 @@ Rules:
 
 ---
 
-## 16. Compilation Rules
+## 18. Compilation Rules
 
 Compilation must fail if:
 
 - unknown guard type
 - unknown state reference
-- schema mismatch
+- schema/law mismatch
 - invalid identifier
 - AUTO_TICK cycle
 - saga violation
@@ -348,12 +392,12 @@ Compilation must fail if:
 Warnings may be issued for:
 
 - unreachable states
-- shadowed transitions
-- empty guard requirements
+- ambiguous transitions (same action + same priority)
+- unused manifest requirements
 
 ---
 
-## 17. Determinism Rules
+## 19. Determinism Rules
 
 All laws must be:
 
@@ -369,7 +413,7 @@ No:
 
 ---
 
-## 18. Manifest Output
+## 20. Manifest Output
 
 For each state:
 
@@ -384,7 +428,7 @@ Manifest is:
 
 ---
 
-## 19. Digest
+## 21. Digest
 
 Each compiled law produces a digest:
 
@@ -394,12 +438,12 @@ Each compiled law produces a digest:
 
 ---
 
-## 20. Compatibility Rules
+## 22. Compatibility Rules
 
 A law is valid only if:
 
 - all references resolve
-- schema matches
+- schema matches explicitly
 - invariants are satisfied
 - compilation succeeds
 

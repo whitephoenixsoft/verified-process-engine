@@ -1,5 +1,5 @@
 # VPE Schema Authoring Guide
-Version: Canonical v1
+Version: Canonical v2
 
 ## 1. Purpose
 
@@ -59,19 +59,26 @@ Schemas should evolve **additively** when possible.
 
 A schema is defined as:
 
-```json
 {
   "domain": "OrderManagement",
   "version": "1.0.0",
-  "fields": [
-    {
-      "name": "order_total",
-      "type": "Number",
-      "description": "Total order amount"
-    }
-  ]
+  "namespaces": {
+    "rec": [
+      {
+        "name": "order_total",
+        "type": "Number",
+        "description": "Total order amount"
+      }
+    ],
+    "ext": [],
+    "calc": []
+  }
 }
-```
+
+Notes:
+- All three namespaces must be present (may be empty)
+- `sys` is reserved and must not be defined
+
 ---
 
 ## 4. Field Types
@@ -87,13 +94,12 @@ Supported types:
 
 Example:
 
-```json
 {
   "name": "status",
-  "type": "String",
-  "enum": ["Pending", "Approved", "Rejected"]
+  "type": "Enum",
+  "enum_values": ["Pending", "Approved", "Rejected"]
 }
-```
+
 ---
 
 ## 5. Namespaces
@@ -151,28 +157,70 @@ Examples:
 Rules:
 - not defined in schema
 - always read-only
+- validated against built-in system schema
 
 ---
 
-## 6. Field Naming Rules
+## 6. Naming Conventions
 
-All fields must:
+### Field Names
 
-- use snake_case
-- be alphanumeric with underscores
+- must use snake_case
+- must be descriptive and domain-aligned
+- must follow identifier rules
+
+✔ Good:
+- order_total
+- customer_id
+- payment_status
+
+❌ Avoid:
+- order total
+- order-total
+- amount1value
+
+---
+
+### Namespace Usage
+
+All references must include namespace:
+
+✔ Valid:
+- rec.order_total
+- ext.user_id
+
+❌ Invalid:
+- order_total
+- user_id
+
+---
+
+### Enum Values
+
+- must be strings
+- must be stable across versions
+- should follow a consistent style:
+  - PascalCase OR UPPER_CASE
+
+✔ Examples:
+- Approved
+- Pending
+- REJECTED
+
+---
+
+## 7. Identifier Rules
+
+All identifiers must:
+
+- use dot notation: namespace.field
+- contain only alphanumeric characters and underscores
 - not start with a digit
-
-Valid:
-- `order_total`
-- `customer_id`
-
-Invalid:
-- `order-total`
-- `123amount`
+- be case-sensitive
 
 ---
 
-## 7. Schema and Guards
+## 8. Schema and Guards
 
 Guards rely on schema definitions.
 
@@ -191,7 +239,7 @@ Compiler ensures:
 
 ---
 
-## 8. Schema and Manifest
+## 9. Schema and Manifest
 
 The compiler derives required fields from guards.
 
@@ -205,13 +253,13 @@ Guard:
 Manifest includes:
 - `rec.order_total`
 
-This allows:
+This enables:
 - minimal data fetching
 - predictable execution
 
 ---
 
-## 9. Schema Evolution
+## 10. Schema Evolution
 
 ### Allowed Changes
 
@@ -229,7 +277,7 @@ This allows:
 
 ---
 
-## 10. Versioning Strategy
+## 11. Versioning Strategy
 
 Each schema must include:
 
@@ -242,7 +290,22 @@ Example:
 
 ---
 
-## 11. Migration Considerations
+## 12. Schema and Law Binding
+
+A Law must explicitly declare:
+
+- `schema_version`
+
+The compiler enforces:
+
+- schema.domain == law.domain
+- schema.version == law.schema_version
+
+No implicit matching is allowed.
+
+---
+
+## 13. Migration Considerations
 
 When schema changes:
 
@@ -257,7 +320,7 @@ old_total → rec.order_total
 
 ---
 
-## 12. Validation Rules
+## 14. Validation Rules
 
 The compiler must validate:
 
@@ -265,10 +328,12 @@ The compiler must validate:
 2. Type matches usage
 3. Namespace is valid
 4. Writes only occur in `rec.*`
+5. Enum fields define valid values
+6. Schema does not define `sys.*`
 
 ---
 
-## 13. Best Practices
+## 15. Best Practices
 
 ### Keep Fields Focused
 Each field should represent one concept.
@@ -301,7 +366,7 @@ One field = one meaning.
 
 ---
 
-## 14. Anti-Patterns
+## 16. Anti-Patterns
 
 ### Hidden Fields
 Using fields not defined in schema.
@@ -323,35 +388,30 @@ Too many unused fields.
 
 ---
 
-## 15. Example Schema
+## 17. Example Schema
 
-```json
 {
   "domain": "LoanApproval",
   "version": "1.0.0",
-  "fields": [
-    {
-      "name": "amount",
-      "type": "Number"
-    },
-    {
-      "name": "applicant_id",
-      "type": "String"
-    },
-    {
-      "name": "is_high_risk",
-      "type": "Boolean"
-    },
-    {
-      "name": "submitted_at",
-      "type": "DateTime"
-    }
-  ]
+  "namespaces": {
+    "rec": [
+      { "name": "amount", "type": "Number" },
+      { "name": "applicant_id", "type": "String" },
+      { "name": "is_high_risk", "type": "Boolean" },
+      { "name": "submitted_at", "type": "DateTime" }
+    ],
+    "ext": [
+      { "name": "credit_score", "type": "Number" }
+    ],
+    "calc": [
+      { "name": "risk_score", "type": "Number" }
+    ]
+  }
 }
-```
+
 ---
 
-## 16. Mental Model
+## 18. Mental Model
 
 Think of the schema as:
 
@@ -366,7 +426,7 @@ Without a schema:
 
 ---
 
-## 17. Summary
+## 19. Summary
 
 A good schema is:
 

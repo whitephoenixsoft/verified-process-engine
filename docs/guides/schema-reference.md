@@ -1,5 +1,5 @@
 # VPE Schema Reference
-Version: Canonical v1
+Version: Canonical v2
 
 ## 1. Purpose
 
@@ -19,27 +19,33 @@ The compiler MUST enforce all rules defined here.
 
 A schema is a JSON object with the following structure:
 
-```json
 {
   "domain": "string",
   "version": "string",
-  "fields": [ FieldDefinition ]
+  "namespaces": {
+    "rec": [ FieldDefinition ],
+    "ext": [ FieldDefinition ],
+    "calc": [ FieldDefinition ]
+  }
 }
-```
+
+Notes:
+- `rec`, `ext`, and `calc` are required namespaces (may be empty arrays)
+- `sys` is NOT allowed in schema (reserved by VPE)
+
 ---
 
 ## 3. FieldDefinition
 
 Each field is defined as:
 
-```json
 {
   "name": "string",
   "type": "VpeType",
   "description": "string (optional)",
-  "enum": ["string"] (optional)
+  "enum_values": ["string"] (optional)
 }
-```
+
 ---
 
 ## 4. VpeType
@@ -61,46 +67,35 @@ Supported types:
 - UTF-8 string
 - no implicit coercion
 
----
-
 ### Number
 - JSON number
 - treated as double precision or integer (implementation-defined)
 - must support comparison operations
 
----
-
 ### Boolean
 - true / false
-
----
 
 ### DateTime
 - represented as Unix timestamp (integer seconds)
 - must support comparison operations
 - must be compatible with `sys.now`
 
----
-
 ### Duration
 - represented as integer seconds
 - used for time windows and comparisons
 
----
-
 ### Enum
 - restricted string values
-- must include `enum` array in definition
+- must include `enum_values` in definition
 
 Example:
 
-```json
 {
   "name": "tier",
   "type": "Enum",
-  "enum": ["Gold", "Silver", "Bronze"]
+  "enum_values": ["Gold", "Silver", "Bronze"]
 }
-```
+
 ---
 
 ## 6. Namespaces
@@ -109,10 +104,10 @@ Example:
 
 Field access is namespaced:
 
-- `rec.*` → Record fields (schema-defined)
-- `ext.*` → External fields (schema-defined)
-- `calc.*` → Derived fields (schema-defined)
-- `sys.*` → System fields (implicit)
+- `rec.*` → Record fields (schema-defined, writable)
+- `ext.*` → External fields (schema-defined, read-only)
+- `calc.*` → Derived fields (schema-defined, read-only)
+- `sys.*` → System fields (built-in, read-only)
 
 ---
 
@@ -136,7 +131,7 @@ The compiler must:
 
 3. Validate field existence:
    - required for rec/ext/calc
-   - not required for sys
+   - validated against built-in schema for sys
 
 ---
 
@@ -147,30 +142,74 @@ The compiler must:
 - writable
 - used for persistent state
 
----
-
 ### ext.*
 - must exist in schema
 - read-only
 - provided by host
-
----
 
 ### calc.*
 - must exist in schema
 - read-only
 - derived externally
 
----
-
 ### sys.*
 - not defined in schema
 - read-only
 - provided by engine or host
+- validated against built-in system schema
 
 ---
 
-## 8. Identifier Rules
+## 8. Naming Conventions
+
+### Field Names
+
+- must be descriptive and domain-relevant
+- should use snake_case
+- must follow identifier rules
+
+Examples:
+
+✔ valid:
+- order_total
+- customer_id
+- payment_status
+
+❌ invalid:
+- order total
+- order-total
+- 1amount
+
+---
+
+### Namespace Usage
+
+Paths must always be explicit:
+
+✔ valid:
+- rec.order_total
+- ext.user_id
+
+❌ invalid:
+- order_total
+- user_id
+
+---
+
+### Enum Values
+
+- should be stable and descriptive
+- must be strings
+- should use PascalCase or UPPER_CASE consistently
+
+✔ valid:
+- Approved
+- Pending
+- REJECTED
+
+---
+
+## 9. Identifier Rules
 
 All identifiers must:
 
@@ -178,7 +217,7 @@ All identifiers must:
    namespace.field
 
 2. Follow naming rules:
-   - alphanumeric + underscore
+   - alphanumeric + underscore only
    - no spaces
    - no special characters
    - cannot start with digit
@@ -187,7 +226,7 @@ All identifiers must:
 
 ---
 
-## 9. Path Validation
+## 10. Path Validation
 
 For every path used in:
 
@@ -199,12 +238,12 @@ The compiler must:
 
 1. Validate structure (namespace + field)
 2. Validate namespace is allowed
-3. Validate field exists (except sys.*)
+3. Validate field exists (including sys via system schema)
 4. Resolve type
 
 ---
 
-## 10. Type Validation Rules
+## 11. Type Validation Rules
 
 For any operation:
 
@@ -225,7 +264,7 @@ rec.amount (Number) > 100
 
 ✔ Valid:
 
-rec.status (String Enum) == "Approved"
+rec.status (Enum) == "Approved"
 
 ❌ Invalid:
 
@@ -237,22 +276,23 @@ rec.status (Enum) == 1
 
 ---
 
-## 11. Enum Validation
+## 12. Enum Validation
 
 For Enum fields:
 
-1. Value must be string
-2. Value must exist in enum list
+1. `enum_values` must be provided
+2. must contain at least one value
+3. values must be unique
+4. values must follow identifier rules
+5. runtime values must match one of the allowed values
 
 ---
 
-## 12. Write Constraints
+## 13. Write Constraints
 
 ### Allowed Writes
 
 - rec.*
-
----
 
 ### Forbidden Writes
 
@@ -262,14 +302,13 @@ For Enum fields:
 
 Compiler MUST reject:
 
-```json
 {
   "target": "sys.now"
 }
-```
+
 ---
 
-## 13. Schema Lookup
+## 14. Schema Lookup
 
 The compiler must maintain:
 
@@ -281,7 +320,7 @@ rec → { order_total: Number }
 
 ---
 
-## 14. Guard Type Compatibility
+## 15. Guard Type Compatibility
 
 Each guard defines expected input types.
 
@@ -297,17 +336,13 @@ OccurredWithin:
 
 ---
 
-## 15. Temporal Validation
-
-Special rules apply:
+## 16. Temporal Validation
 
 ### DateTime comparisons
 
 Allowed:
 - DateTime vs DateTime
 - DateTime vs sys.now
-
----
 
 ### Duration usage
 
@@ -317,7 +352,7 @@ Used in:
 
 ---
 
-## 16. Missing Fields
+## 17. Missing Fields
 
 If a field is referenced but not defined:
 
@@ -325,7 +360,7 @@ If a field is referenced but not defined:
 
 ---
 
-## 17. Unknown Namespaces
+## 18. Unknown Namespaces
 
 If prefix is not:
 
@@ -338,15 +373,15 @@ If prefix is not:
 
 ---
 
-## 18. Duplicate Fields
+## 19. Duplicate Fields
 
-Duplicate field names in schema:
+Duplicate field names within the same namespace:
 
 → Compilation MUST fail
 
 ---
 
-## 19. Schema Versioning
+## 20. Schema Versioning
 
 Each schema is uniquely identified by:
 
@@ -360,16 +395,34 @@ The compiler must:
 
 ---
 
-## 20. Schema Binding
+## 21. Schema Binding
 
 During compilation:
 
-- process must reference a schema
+- Law must explicitly declare `schema_version`
+- Schema domain must match law domain
+- Schema version must match law.schema_version
 - all paths must resolve against that schema
 
 ---
 
-## 21. Determinism Requirement
+## 22. System Schema
+
+VPE provides a built-in system schema.
+
+Examples include:
+
+- sys.now → DateTime
+- sys.trace_id → String
+
+Properties:
+- read-only
+- always available at compile time
+- must be explicitly provided at runtime if required
+
+---
+
+## 23. Determinism Requirement
 
 Schema must not introduce:
 
@@ -379,7 +432,7 @@ Schema must not introduce:
 
 ---
 
-## 22. Error Conditions
+## 24. Error Conditions
 
 Compiler MUST error on:
 
@@ -389,24 +442,28 @@ Compiler MUST error on:
 - invalid enum value
 - invalid identifier
 - illegal write target
+- schema/law mismatch
 
 ---
 
-## 23. Minimal Schema Example
+## 25. Minimal Schema Example
 
-```json
 {
   "domain": "Example",
   "version": "1.0.0",
-  "fields": [
-    { "name": "amount", "type": "Number" },
-    { "name": "status", "type": "Enum", "enum": ["A", "B"] }
-  ]
+  "namespaces": {
+    "rec": [
+      { "name": "amount", "type": "Number" },
+      { "name": "status", "type": "Enum", "enum_values": ["A", "B"] }
+    ],
+    "ext": [],
+    "calc": []
+  }
 }
-```
+
 ---
 
-## 24. Internal Representation (Conceptual)
+## 26. Internal Representation (Conceptual)
 
 Schema should compile to:
 
@@ -419,7 +476,7 @@ rec → status → Enum
 
 ---
 
-## 25. Summary
+## 27. Summary
 
 The schema is:
 

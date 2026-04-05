@@ -1,5 +1,5 @@
 # VPE Development Sequencing Plan
-Version: Canonical v1.2
+Version: Canonical v1.3
 
 ## 1. Purpose
 
@@ -29,7 +29,7 @@ The CLI is a thin harness over the Rust library.
 The FFI is not a separate implementation.  
 The FFI is a thin interoperability layer over the Rust library.
 
-The **Compiler, Runtime, and Event Model define system truth**.  
+The **Compiler, Runtime, Event Model, and Manifest define system truth**.  
 The Engine is an orchestration layer built on top of them.
 
 ---
@@ -163,6 +163,8 @@ This ensures:
 
 Library:
 - schema parsing & validation
+- schema namespace model (`rec`, `ext`, `calc`) and built-in `sys`
+- schema/law compatibility validation
 - law parsing & validation
 - registry (built-in guards)
 - compiler:
@@ -174,6 +176,7 @@ Library:
 - compiled process structure (immutable)
 - digest generation
 - validation & compilation reports
+- compiler review pass before guard refactor
 
 CLI:
 - `vpe validate`
@@ -185,6 +188,7 @@ Goals:
 - diagnostics are useful and structured
 - manifests are correct, complete, and inspectable
 - compiler usability is proven via CLI
+- compiler semantics are reviewed before refactoring guard compilation
 
 ---
 
@@ -297,13 +301,16 @@ Goals:
 
 ### Phase 1 Exit Criteria
 - schema validation works
+- schema namespaces and built-in `sys` are enforced
 - law validation works
+- law/schema compatibility is enforced explicitly
 - compiler produces:
   - digest
   - manifests (complete + validated)
   - reports
 - compiled process is deterministic and immutable
 - CLI validate/compile/manifest are usable in practice
+- compiler review is completed before guard compilation refactor
 
 ---
 
@@ -474,6 +481,8 @@ Not required early:
    - migration  
 13. CLI is the primary usability validation surface  
 14. Engine is orchestration, not the core  
+15. Law and schema versions are explicit and independently versioned  
+16. Compiler review must happen before guard compilation refactor  
 
 ---
 
