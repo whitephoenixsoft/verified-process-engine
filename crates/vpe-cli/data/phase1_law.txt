@@ -1,0 +1,227 @@
+{
+  "domain": "Commerce",
+  "process": "OrderApproval",
+  "version": "1.0.0",
+  "initial_state": "Draft",
+  "states": [
+    {
+      "name": "Draft",
+      "is_transient": false,
+      "transitions": [
+        {
+          "action": "Submit",
+          "to": "PendingPayment",
+          "priority": 100,
+          "guards": [
+            {
+              "type": "GreaterThan",
+              "path": "rec.amount",
+              "value": 100
+            }
+          ],
+          "effects": [
+            {
+              "type": "ChargeCard",
+              "target": "Payments",
+              "action": "Capture",
+              "mode": "tracked",
+              "params": {
+                "amount_field": "rec.amount"
+              }
+            }
+          ],
+          "comment": "Tracked payment attempt for non-trivial orders"
+        },
+        {
+          "action": "Submit",
+          "to": "Approved",
+          "priority": 50,
+          "guards": [
+            {
+              "type": "FieldsEqual",
+              "left_path": "rec.status",
+              "right_path": "ext.status"
+            }
+          ],
+          "effects": [
+            {
+              "type": "SendEmail",
+              "target": "Notifications",
+              "action": "Send",
+              "mode": "untracked",
+              "params": {
+                "template": "order-approved"
+              }
+            }
+          ],
+          "comment": "Fast path when external status already matches"
+        },
+        {
+          "action": "Submit",
+          "to": "Review",
+          "priority": 10,
+          "guards": [
+            {
+              "type": "InSet",
+              "path": "rec.status",
+              "values": ["Draft", "Review"]
+            }
+          ],
+          "effects": [
+            {
+              "type": "SendEmail",
+              "target": "Notifications",
+              "action": "Send",
+              "mode": "untracked",
+              "params": {
+                "template": "order-under-review"
+              }
+            }
+          ],
+          "comment": "Normal review path with untracked notification"
+        }
+      ]
+    },
+    {
+      "name": "PendingPayment",
+      "is_transient": true,
+      "transitions": [
+        {
+          "action": "PaymentSucceeded",
+          "to": "Approved",
+          "priority": 100,
+          "guards": [
+            {
+              "type": "Equals",
+              "path": "rec.payment_state",
+              "value": "captured"
+            }
+          ],
+          "effects": [
+            {
+              "type": "SendEmail",
+              "target": "Notifications",
+              "action": "Send",
+              "mode": "untracked",
+              "params": {
+                "template": "payment-success"
+              }
+            }
+          ],
+          "comment": "Tracked effect outcome success"
+        },
+        {
+          "action": "PaymentFailed",
+          "to": "PaymentFailed",
+          "priority": 100,
+          "guards": [
+            {
+              "type": "NotInSet",
+              "path": "rec.payment_state",
+              "values": ["captured"]
+            }
+          ],
+          "effects": [
+            {
+              "type": "SendEmail",
+              "target": "Notifications",
+              "action": "Send",
+              "mode": "untracked",
+              "params": {
+                "template": "payment-failed"
+              }
+            }
+          ],
+          "comment": "Tracked effect outcome failure"
+        },
+        {
+          "action": "AUTO_TICK",
+          "to": "PaymentTimeout",
+          "priority": 10,
+          "guards": [
+            {
+              "type": "TimeElapsed",
+              "seconds": 300
+            }
+          ],
+          "effects": [],
+          "comment": "Timeout path for pending payment"
+        }
+      ]
+    },
+    {
+      "name": "Review",
+      "is_transient": false,
+      "transitions": [
+        {
+          "action": "Approve",
+          "to": "Approved",
+          "priority": 100,
+          "guards": [
+            {
+              "type": "OccurredWithin",
+              "target_action": "FraudCheck",
+              "window_seconds": 86400
+            }
+          ],
+          "effects": [
+            {
+              "type": "SendEmail",
+              "target": "Notifications",
+              "action": "Send",
+              "mode": "untracked",
+              "params": {
+                "template": "order-approved"
+              }
+            }
+          ],
+          "comment": "Approve after recent fraud check"
+        },
+        {
+          "action": "Reject",
+          "to": "Rejected",
+          "priority": 100,
+          "guards": [
+            {
+              "type": "Exists",
+              "path": "rec.email"
+            }
+          ],
+          "effects": [
+            {
+              "type": "SendEmail",
+              "target": "Notifications",
+              "action": "Send",
+              "mode": "untracked",
+              "params": {
+                "template": "order-rejected"
+              }
+            }
+          ],
+          "comment": "Reject with notification when email exists"
+        }
+      ]
+    },
+    {
+      "name": "Approved",
+      "is_transient": false,
+      "transitions": []
+    },
+    {
+      "name": "Rejected",
+      "is_transient": false,
+      "transitions": []
+    },
+    {
+      "name": "PaymentFailed",
+      "is_transient": false,
+      "transitions": []
+    },
+    {
+      "name": "PaymentTimeout",
+      "is_transient": false,
+      "transitions": []
+    }
+  ],
+  "migration_rules": []
+}

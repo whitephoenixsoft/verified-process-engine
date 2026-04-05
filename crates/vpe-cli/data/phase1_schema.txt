@@ -1,0 +1,36 @@
+{
+  "domain": "Commerce",
+  "version": "1.0.0",
+  "fields": [
+    {
+      "name": "amount",
+      "field_type": "Number",
+      "description": "Order or payment amount"
+    },
+    {
+      "name": "status",
+      "field_type": "String",
+      "description": "Primary record status"
+    },
+    {
+      "name": "customer_tier",
+      "field_type": "String",
+      "description": "Customer tier classification"
+    },
+    {
+      "name": "email",
+      "field_type": "String",
+      "description": "Customer notification email"
+    },
+    {
+      "name": "payment_state",
+      "field_type": "String",
+      "description": "Payment lifecycle state"
+    },
+    {
+      "name": "is_priority",
+      "field_type": "Boolean",
+      "description": "Priority handling flag"
+    }
+  ]
+}
