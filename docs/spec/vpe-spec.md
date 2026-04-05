@@ -1,5 +1,5 @@
 # Verified Process Engine (VPE) Specification
-Version: Canonical v1.4
+Version: Canonical v1.5
 
 ## 1. Purpose
 VPE is a deterministic process engine implemented in Rust. It compiles declarative laws into optimized structures and evaluates them against explicit inputs to produce decisions.
@@ -161,12 +161,47 @@ Effects are:
 - not executed by VPE
 - handled externally by the host
 
+### Effect Classification
+
+Effects are divided into two categories:
+
+#### Tracked Effects
+Tracked effects influence business correctness and must be explicitly resolved.
+
+Examples:
+- charging a payment
+- reserving inventory
+- creating shipments
+- external approval workflows
+
+Requirements:
+- must transition into a transient (saga) state
+- must define success/failure/timeout handling paths
+- must be resolved via subsequent events
+
+#### Untracked Effects
+Untracked effects are best-effort side effects that do not affect core business correctness.
+
+Examples:
+- sending notification emails
+- emitting analytics/telemetry
+- cache invalidation
+- background jobs
+
+Properties:
+- do not require transient states
+- do not require outcome events
+- do not block process progression
+
+### Effect Fields
+
 Typical fields:
 - type
 - target
 - action
 - parameters
-- optional success/failure/timeout handlers
+- mode (`tracked` | `untracked`, default: `untracked`)
+- optional success/failure/timeout handlers (tracked only)
 
 ---
 
@@ -212,7 +247,7 @@ Optional:
 6. Graph construction (state indexing)
 7. Topology validation (reachability, orphans)
 8. Auto-transition cycle detection (`AUTO_TICK`)
-9. Saga validation (transient state enforcement)
+9. Saga validation (tracked effects only)
 10. Guard/effect compilation (Registry binding)
 11. Manifest generation (per-state requirements)
 12. Manifest validation
@@ -413,7 +448,9 @@ Includes:
 
 ---
 
-## 16. Future Evolution: Multi-Process Orchestration
+## 16. Future Evolution
+
+### 16.1 Multi-Process Orchestration
 
 VPE currently evaluates a single process per execution.
 
@@ -429,6 +466,19 @@ Future direction:
 - a higher-level process manager may coordinate multi-process flows
 
 This is intentionally not part of the core runtime.
+
+### 16.2 Effect Model Evolution
+
+The effect system is designed to support both:
+
+- strict, saga-driven workflows (tracked effects)
+- lightweight, fire-and-forget application behavior (untracked effects)
+
+Future enhancements may include:
+- richer effect typing
+- delivery guarantees
+- observability hooks
+- integration contracts
 
 ---
 

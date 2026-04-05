@@ -29,7 +29,7 @@ Required fields:
 
 Example:
 
-```jsin
+```json
 {
   "domain": "OrderManagement",
   "process": "OrderFlow",
@@ -155,6 +155,7 @@ Effects are structured objects.
 Fields:
 
 - type: string (required)
+- mode: string (optional) `[tracked | untracked (default)]`
 - target: string (optional)
 - action: string (optional)
 - params: object (optional)
@@ -164,6 +165,7 @@ Example:
 
 ```json
 {
+  "mode": "trecked",
   "type": "WebHook",
   "target": "Payments",
   "action": "Charge",
@@ -176,13 +178,13 @@ Constraints:
 
 - effects are not executed by VPE
 - effects must be serializable
-- transitions with effects must land in transient states
+- transitions with effects of mode `tracked` must land in transient states
 
 ---
 
 ## 9. Saga Constraints
 
-If a transition contains effects:
+If a transition contains `tracked` effects:
 
 - target state must have is_transient = true
 

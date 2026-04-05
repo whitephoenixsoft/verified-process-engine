@@ -159,6 +159,7 @@ Effects represent intent, not execution.
 {
   "effects": [
     {
+      "mode": "untracked",
       "type": "WebHook",
       "target": "Payments",
       "action": "Charge",
@@ -172,13 +173,13 @@ Effects represent intent, not execution.
 Rules:
 - Effects are emitted, not executed
 - Host system handles them
-- Effects make transitions non-atomic
+- Effects with the mode of `tracked` make transitions non-atomic
 
 ---
 
 ## 8. Saga Pattern (Transient States)
 
-If a transition has effects, it MUST go to a transient state.
+If a transition has effects of mode `tracked`, it MUST go to a transient state.
 ```json
 {
   "name": "PendingPayment",

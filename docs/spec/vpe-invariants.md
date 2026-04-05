@@ -1,5 +1,5 @@
 # Verified Process Engine (VPE) Invariants
-Version: Canonical v1.2
+Version: Canonical v1.3
 
 ## 1. Determinism Invariants
 1. VPE execution is a pure function of explicit inputs only.
@@ -24,7 +24,7 @@ Version: Canonical v1.2
 2. The Compiler must reject invalid laws at compile time.
 3. All states, transitions, guards, effects, and paths must resolve during compilation.
 4. The Compiler must reject illegal auto-transition cycles.
-5. The Compiler must enforce side-effect safety rules.
+5. The Compiler must enforce effect safety rules based on effect classification.
 6. The Compiler must emit per-state manifests of required data (history and context).
 7. The compiled representation must be deterministic and independent of runtime conditions.
 8. Compilation must not depend on external state, I/O, or runtime data.
@@ -66,13 +66,34 @@ Version: Canonical v1.2
 4. Auto transitions must not depend on implicit external triggers.
 5. Auto transitions must remain deterministic given the same inputs.
 
-## 8. Saga and Side-Effect Invariants
-1. Transitions with effects are non-atomic.
-2. Such transitions must land in transient states.
-3. Transient states must define at least one timeout or failure exit.
-4. Runtime emits effects but does not execute them.
-5. Effects represent intent and must be handled by the host system.
-6. Every external effect must have defined success, failure, and timeout handling paths.
+## 8. Effect and Saga Invariants
+
+### 8.1 General Effect Invariants
+1. Effects represent intent and must be handled by the host system.
+2. Runtime emits effects but does not execute them.
+3. Effects are not proof of execution and must not be treated as completed actions.
+4. Effects must be deterministic outputs of evaluation.
+
+### 8.2 Effect Classification
+1. Every effect must be classified as either:
+   - tracked
+   - untracked
+2. If no classification is provided, the effect defaults to untracked.
+
+### 8.3 Tracked Effect Invariants
+1. Tracked effects influence business correctness.
+2. Transitions containing tracked effects are non-atomic.
+3. Such transitions must land in transient states.
+4. Transient states must define at least one valid exit path.
+5. Tracked effects must be resolved via subsequent events.
+6. The process must not assume completion of a tracked effect without an event.
+
+### 8.4 Untracked Effect Invariants
+1. Untracked effects are best-effort side effects.
+2. Untracked effects must not influence core process correctness.
+3. Transitions with untracked effects may land in non-transient states.
+4. Untracked effects do not require outcome events.
+5. Untracked effects must not introduce hidden dependencies on external outcomes.
 
 ## 9. Migration Invariants
 1. Migration is lazy and deterministic.

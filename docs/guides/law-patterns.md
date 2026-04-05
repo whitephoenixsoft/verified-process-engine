@@ -122,7 +122,10 @@ Flow:
 {
   "action": "SubmitPayment",
   "to": "PendingPayment",
-  "effects": [ ... ]
+  "effects": [ 
+    "mode": "tracked"
+    ... 
+  ]
 }
 ```
 Transient state:
