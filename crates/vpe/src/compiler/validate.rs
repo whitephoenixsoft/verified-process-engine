@@ -278,12 +278,12 @@ fn validate_in_set_guard(
         .and_then(Value::as_array)
         .ok_or_else(|| CompileError::InvalidLaw("InSet/NotInSet requires array field 'values'".into()))?;
 
-    let field_type = schema
-        .resolve_path_type(path)
+    let field = schema
+        .resolve_field(path)
         .ok_or_else(|| CompileError::UnresolvedReference(format!("unknown field path '{path}'")))?;
 
     for value in values {
-        if !value_matches_type(field_type, value) {
+        if !value_matches_field(field.clone(), value) {
             return Err(CompileError::TypeMismatch(format!(
                 "InSet/NotInSet on '{path}' received value incompatible with field type"
             )));
@@ -376,11 +376,11 @@ fn validate_equals_guard(
         .get("value")
         .ok_or_else(|| CompileError::InvalidLaw("Equals requires field 'value'".into()))?;
 
-    let field_type = schema
-        .resolve_path_type(path)
+    let field = schema
+        .resolve_field(path)
         .ok_or_else(|| CompileError::UnresolvedReference(format!("unknown field path '{path}'")))?;
 
-    if value_matches_type(field_type, value) {
+    if value_matches_field(field.clone(), value) {
         Ok(())
     } else {
         Err(CompileError::TypeMismatch(format!(
@@ -420,17 +420,26 @@ fn validate_time_elapsed_guard(guard: &GuardSource) -> Result<(), CompileError> 
     Ok(())
 }
 
-fn value_matches_type(field_type: &SchemaFieldType, value: &Value) -> bool {
-    match field_type {
+fn value_matches_field(
+    field: crate::schema::domain_schema::FieldDefinitionRef<'_>,
+    value: &Value,
+) -> bool {
+    match field.field_type() {
         SchemaFieldType::String => value.is_string(),
         SchemaFieldType::Number => value.is_number(),
         SchemaFieldType::Boolean => value.is_boolean(),
         SchemaFieldType::DateTime => value.is_number(),
         SchemaFieldType::Duration => value.is_number(),
-        SchemaFieldType::Enum => value
-            .as_str()
-            .map(|s| enum_values.iter().any(|o| o == s))
-            .unwrap_or(false),
+        SchemaFieldType::Enum => {
+            let Some(actual) = value.as_str() else {
+                return false;
+            };
+
+            match field.enum_values() {
+                Some(values) => values.iter().any(|v| v == actual),
+                None => false,
+            }
+        }
     }
 }
 
