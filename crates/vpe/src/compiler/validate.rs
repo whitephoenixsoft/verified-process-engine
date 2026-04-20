@@ -317,7 +317,7 @@ fn validate_fields_equal_guard(
         .resolve_path_type(right_path)
         .ok_or_else(|| CompileError::UnresolvedReference(format!("unknown field path '{right_path}'")))?;
 
-    if field_types_compatible(left_type, right_type) {
+    if field_types_compatible(&left_type, &right_type) {
         Ok(())
     } else {
         Err(CompileError::TypeMismatch(format!(
