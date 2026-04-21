@@ -69,7 +69,7 @@ pub fn validate_law(
         }
 
         validate_transient_states(law)?;
-        validate_auto_tick_structure(law)?;
+        warnings.extend(validate_auto_tick_structure(law)?);
         
         if state.transitions.is_empty() {
             warnings.push(format!("state '{}' is terminal", state.name));
@@ -81,7 +81,8 @@ pub fn validate_law(
     Ok(warnings)
 }
 
-fn validate_auto_tick_structure(law: &LawSource) -> Result<(), CompileError> {
+fn validate_auto_tick_structure(law: &LawSource) -> Result<Vec<String>, CompileError> {
+    let mut warnings = Vec::new();
     for state in &law.states {
         for transition in &state.transitions {
             let is_auto_tick = transition.action == "AUTO_TICK";
@@ -93,10 +94,16 @@ fn validate_auto_tick_structure(law: &LawSource) -> Result<(), CompileError> {
             if is_auto_tick && transition.priority == 0 {
                 // allowed; compiler already sorts deterministically
             }
+
+            if is_auto_tick && transition.guards.len() == 0 {
+                warnings.push(format!("state '{}' has an infinite loop risk because it has no guards", state.name));
+            }
         }
     }
 
-    validate_auto_tick_cycles(law)
+    validate_auto_tick_cycles(law)?;
+
+    Ok(warnings)
 }
 
 fn validate_auto_tick_cycles(law: &LawSource) -> Result<(), CompileError> {
@@ -1378,6 +1385,54 @@ mod tests {
 
         let result = validate_law(&schema(), &law, &registry());
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn warns_on_auto_tick_infinite_loop() {
+        let law = LawSource {
+            domain: "TestDomain".into(),
+            schema_version: "1.0.0".into(),
+            process: "TestProcess".into(),
+            version: "1.0.0".into(),
+            initial_state: "A".into(),
+            states: vec![
+                StateSource {
+                    name: "A".into(),
+                    is_transient: true,
+                    transitions: vec![TransitionSource {
+                        action: "AUTO_TICK".into(),
+                        to: "B".into(),
+                        priority: 0,
+                        guards: vec![GuardSource {
+                            guard_type: "Default".into(),
+                            params: BTreeMap::<String, Value>::new(),
+                        }],
+                        effects: vec![],
+                        comment: None,
+                    }],
+                },
+                StateSource {
+                    name: "B".into(),
+                    is_transient: true,
+                    transitions: vec![TransitionSource {
+                        action: "AUTO_TICK".into(),
+                        to: "C".into(),
+                        priority: 0,
+                        guards: vec![],
+                        effects: vec![],
+                        comment: None,
+                    }],
+                },
+                StateSource {
+                    name: "C".into(),
+                    is_transient: false,
+                    transitions: vec![],
+                },
+            ],
+            migration_rules: vec![],
+        };
+        let result = validate_law(&schema(), &law, &registry()).unwrap();
+        assert!(result.iter().any(|w| w.contains("infinite loop")));
     }
 
     #[test]
