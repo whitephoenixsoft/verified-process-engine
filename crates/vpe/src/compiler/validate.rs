@@ -1229,6 +1229,28 @@ mod tests {
     }
 
     #[test]
+    fn rejects_transient_state_with_no_exit() {
+        let law = LawSource {
+            domain: "TestDomain".into(),
+            schema_version: "1.0.0".into(),
+            process: "TestProcess".into(),
+            version: "1.0.0".into(),
+            initial_state: "Draft".into(),
+            states: vec![
+                StateSource {
+                    name: "Draft".into(),
+                    is_transient: true,
+                    transitions: vec![],
+                },
+            ],
+            migration_rules: vec![],
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::InvalidLaw(_))));
+    }
+
+    #[test]
     fn allows_tracked_effect_targeting_transient_state_with_exit() {
         let law = LawSource {
             domain: "TestDomain".into(),
