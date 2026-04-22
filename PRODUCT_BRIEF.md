@@ -1,318 +1,437 @@
 # VPE Product Brief
-Version: Canonical v1
+Version: Interim Revision
 
 ## 1. Overview
 
-The Verified Process Engine (VPE) is a deterministic decision engine that compiles declarative process logic into an executable model.
+The Verified Process Engine (VPE) is the **process brain of an application**.
 
-VPE separates:
-- **what should happen** (Law)
-- from **how and when it happens** (Execution systems)
+It exists to centralize lawful process reasoning so applications do not scatter business-rule and transition logic across controllers, services, jobs, scripts, workers, and integrations.
 
-VPE is designed to:
-- centralize business logic
-- make decisions deterministic and replayable
-- enable compile-time validation of workflows
-- integrate cleanly with existing systems
+VPE is a deterministic, compiled process-governance core.
+It separates:
 
-VPE is not a replacement for orchestration, storage, or execution frameworks.  
-It is a **decision layer** that complements them.
+- **what is allowed to happen next**
+- from **how the host carries it out**
+
+VPE does not replace orchestration, storage, messaging, or execution systems.
+It gives them a more disciplined decision core.
+
+A simple way to understand the boundary is:
+
+**VPE decides. The host does.**
 
 ---
 
 ## 2. Problem Statement
 
-Modern systems often suffer from:
+Modern systems often accumulate a structural failure before they adopt better process tooling:
 
-- business logic scattered across services
-- implicit decision-making hidden in code
-- inconsistent behavior across environments
-- inability to replay or audit decisions
-- fragile workflows with runtime failures instead of compile-time validation
+- business rules spread across multiple services and codepaths
+- lawful transitions are checked inconsistently in different places
+- process behavior becomes partly implicit and partly duplicated
+- debugging requires tracing conditions across handlers, jobs, and integrations
+- process changes require touching many areas of the host application
+- confidence drops because there is no single authoritative place to ask what is allowed
 
-This leads to:
-- difficult debugging
-- slow iteration
-- increased operational risk
-- lack of confidence in system behavior
+This is not only a rules problem.
+It is a structure problem.
+
+Many teams eventually react by:
+
+- building internal rules layers
+- adopting workflow tooling
+- creating admin or low-code shells
+- re-architecting their applications
+
+But the underlying pain is often the same:
+
+**there is no dedicated structural center for lawful process reasoning.**
 
 ---
 
-## 3. Solution
+## 3. Product Position
 
-VPE introduces a new layer:
+VPE belongs broadly to the **business-rule and process-governance engine** family.
 
-> A **deterministic, compiled decision engine** that evaluates process logic as a pure function.
+What makes it distinctive is not that it invents the idea of centralizing business logic. Many organizations build some version of this capability privately.
 
-Core model:
+What VPE does differently is attempt to make that capability:
+
+- deterministic
+- compiled
+- history-aware
+- host-bounded
+- architecture-first
+- reusable as a core substrate rather than buried inside one product or low-code shell
+
+VPE should not be understood primarily as:
+
+- a workflow executor
+- a job scheduler
+- a message broker
+- a low-code runtime
+- a database
+- a side-effect engine
+
+It is best understood as:
+
+- a deterministic process-governance core
+- a compiled business-rule engine for lawful transitions
+- a decision layer between application state and application execution
+
+---
+
+## 4. Core Model
+
+VPE evaluates process logic as a deterministic function over explicit inputs.
+
+Conceptually:
 
 compile(Law, Schema, Registry) → CompiledProcess  
 evaluate(CompiledProcess, Request) → Verdict
 
 Where:
+
 - **Law** defines the process declaratively
-- **Schema** defines valid data
-- **Registry** defines executable logic (guards)
-- **Request** provides current context and history
-- **Verdict** defines the next state and intended effects
+- **Schema** defines the typed process data model
+- **Registry** provides executable guard implementations
+- **Request** provides explicit context, state assumptions, and relevant history
+- **Verdict** describes the lawful result of evaluation
+
+VPE’s job is to determine what is allowed given explicit known truth.
+It does not perform the resulting work itself.
 
 ---
 
-## 4. Key Capabilities
+## 5. Key Capabilities
+
+### Process-Centered Business Rules
+
+VPE centralizes process logic that would otherwise be scattered through host code.
+
+This allows teams to:
+
+- ask one authoritative layer what is legal
+- keep transition logic inspectable
+- reduce duplication across synchronous and asynchronous codepaths
 
 ### Deterministic Execution
-- Same inputs → same outputs
-- No hidden state or side effects
-- Fully replayable
+
+Given the same compiled process and the same effective inputs, VPE produces the same result.
+
+This supports:
+
+- repeatability
+- replayability
+- stronger debugging
+- more credible automation
 
 ### Compile-Time Validation
-- Detect invalid workflows before runtime
-- Enforce:
-  - no illegal cycles
-  - valid transitions
-  - type-safe logic
-  - saga completeness
+
+VPE validates process definitions before runtime.
+
+This enables early detection of issues such as:
+
+- invalid transitions
+- illegal structural configurations
+- type mismatches
+- broken references
+- incomplete process structures
 
 ### History-Aware Decisions
-- Decisions can depend on:
-  - past events
-  - time windows
-  - event frequency
 
-### Explicit Data Dependencies
-- Per-state manifests define required:
-  - history
-  - context fields
+VPE can evaluate process legality using explicit historical context when needed.
 
-### Separation of Concerns
-- VPE decides
-- host systems execute
+This allows decisions to depend on:
 
-### Versioning & Migration
-- Processes are versioned
-- Records can be deterministically lifted between versions
+- prior events
+- temporal patterns
+- frequency windows
+- state-transition history
 
----
+### Explicit Data Requirements
 
-## 5. What VPE Is
+VPE can expose required inputs and required historical context rather than forcing the host to guess.
 
-VPE is:
+This makes integration more predictable and less ad hoc.
 
-- a decision engine
-- a process compiler
-- a deterministic state transition evaluator
-- a bridge between data and orchestration
+### Versioning, Simulation, and Migration
+
+VPE is designed to support process evolution over time.
+
+This includes:
+
+- versioned process definitions
+- safe change analysis
+- deterministic migration/lift patterns
+- replay and simulation against historical truth
 
 ---
 
-## 6. What VPE Is Not
+## 6. Boundary and Responsibility Model
 
-VPE is not:
+VPE’s strongest architectural rule is:
 
-- a workflow executor
-- a job scheduler
-- a message broker
-- a database
-- a side-effect execution engine
+**VPE decides. The host does.**
 
-VPE does not:
-- call external services
-- perform I/O
-- manage infrastructure
+### VPE is responsible for:
+
+- lawful process reasoning
+- transition legality
+- deterministic evaluation
+- consuming explicit context and history
+- producing verdicts, emitted events, and effect intent
+- process compilation and validation
+
+### The host is responsible for:
+
+- persistence
+- orchestration
+- transport and APIs
+- retries and scheduling
+- side-effect execution
+- integration with external systems
+- operational runtime control
+
+This separation is deliberate.
+VPE centralizes process reasoning, not application execution.
 
 ---
 
-## 7. How VPE Fits in a System
+## 7. Concurrency and Commit Reality
+
+VPE’s determinism does not by itself solve multi-host coordination.
+
+A verdict is valid relative to the specific truth supplied in the request.
+The host must only commit that verdict if that truth is still current at commit time.
+
+In practice, this means:
+
+- VPE decides from explicit known truth
+- the host verifies that the relevant version or anchor is still current
+- stale verdicts must not become new truth
+- if truth has advanced, the host must re-evaluate
+
+This preserves VPE’s role as the process brain without making it the entire runtime authority.
+
+---
+
+## 8. How VPE Fits in a System
 
 Typical architecture:
 
 Client / API / Event Source  
-→ VPE (decision layer)  
-→ Host system executes effects  
-→ Events persisted  
-→ Next request evaluated
+→ Host loads explicit state and history  
+→ VPE evaluates legality and next result  
+→ Host persists outcome atomically  
+→ Host executes intended effects  
+→ Future requests evaluate again
 
 VPE sits between:
-- **data**
-- and **action**
+
+- the host’s known truth
+- and the host’s real-world execution
+
+It is the reasoning center, not the whole application body.
 
 ---
 
-## 8. Ecosystem Compatibility
+## 9. Relationship to Adjacent Categories
 
-VPE is designed to complement existing tools, not replace them.
+### Workflow Engines
 
-### Workflow Engines (Temporal, Airflow, Argo)
+Workflow systems usually handle:
 
-These systems handle:
 - execution
 - retries
 - scheduling
 - distributed coordination
 
 VPE provides:
-- deterministic decision-making
+
+- deterministic process reasoning
 - validated transition logic
+- explicit legality boundaries
 
-**Integration pattern:**
-- workflow calls VPE to decide next step
-- workflow executes resulting effects
+A workflow engine may call VPE for decisions.
+VPE should not become the workflow engine.
 
----
+### Rules Engines
 
-### Rules Engines (Drools, DMN)
-
-These systems provide:
-- stateless rule evaluation
-
-VPE extends this with:
-- state
-- history
-- temporal logic
-- process flow
-
----
-
-### State Machines (XState, Step Functions)
-
-These systems provide:
-- structural state transitions
+Rules engines often evaluate stateless or loosely stateful business conditions.
 
 VPE adds:
-- compile-time guarantees
-- rich guard logic
-- history-aware decisions
-- migration support
 
----
+- process structure
+- transition semantics
+- explicit state progression
+- historical reasoning
+- stronger compile-time discipline
 
-### Policy Engines (OPA)
+### State Machines
 
-OPA provides:
-- deterministic policy evaluation
+State machines provide structural transitions.
+
+VPE adds:
+
+- richer validation
+- stronger authoring boundaries
+- explicit data requirements
+- historical and process-aware reasoning
+- migration and simulation orientation
+
+### Policy Engines
+
+Policy systems answer whether something is allowed.
 
 VPE extends this into:
-- multi-step processes
-- state transitions
-- orchestration intent
+
+- lawful multi-step process evolution
+- state progression
+- orchestratable effect intent
+- process-aware transition evaluation
+
+### Low-Code Process Tools
+
+Many low-code systems expose a UI over hidden internal process or business-rule cores.
+
+VPE is not currently positioned as a low-code product.
+However, its architecture is strong enough that a low-code or admin-facing layer could eventually be built above it.
+
+The current focus is the rigorous core, not the UI shell.
 
 ---
 
-### Event-Sourced Systems
+## 10. Example Use Cases
 
-Event systems provide:
-- data and history
+VPE is a good fit when process correctness matters and lawful transition logic is beginning to spread across multiple codepaths.
 
-VPE provides:
-- deterministic interpretation of that history
-- consistent decision outcomes
+Examples include:
 
----
+### Application and Platform Flows
 
-## 9. Example Use Cases
-
-### Web Application Logic
 - approvals
 - onboarding flows
-- entitlement decisions
+- entitlement changes
+- review and escalation paths
+- exception handling flows
 
-### Financial Systems
-- loan approval
-- fraud detection
-- transaction validation
+### Financial and Risk-Oriented Systems
 
-### Event-Driven Systems
-- orchestrating microservices
-- reacting to domain events
+- transaction review
+- fraud-related decision paths
+- compliance-oriented process gating
+- multi-step approval structures
 
-### Workflow Orchestration
-- decision layer for Temporal/Argo flows
+### Event-Driven and Distributed Systems
 
-### Versioned Business Processes
-- evolving rules safely over time
-- replaying historical decisions
+- deterministic decision layers for event consumers
+- process interpretation over historical event streams
+- host-side orchestration informed by validated process outcomes
+
+### Long-Lived Business Processes
+
+- evolving business rules over time
+- replayable decision histories
+- simulation before process upgrades
+- migration across process versions
 
 ---
 
-## 10. Product Surfaces
+## 11. Product Surfaces
 
 ### Rust Library
-- canonical implementation
-- high-performance execution
-- embeddable in applications
+
+The Rust implementation is the canonical semantic core.
+It is the primary authority for:
+
+- compilation
+- evaluation
+- validation
+- manifests
+- simulation and migration behavior
 
 ### CLI
-- design-time validation
-- execution harness
-- simulation and debugging tool
 
-### FFI (Planned)
-- integration with:
-  - .NET
-  - Go
-  - Python
+The CLI is a professional shell around the core.
+It makes VPE feel like a real language/tooling ecosystem through:
+
+- validation
+- compilation
+- inspection
+- execution harnesses
+- simulation workflows
+- debugging support
+
+The CLI may become a major power-user surface, but it must remain tooling around semantic truth, not a competing semantic authority.
+
+### FFI and Embedding
+
+FFI support is intended for broader host integration.
+Early FFI may prioritize simplicity and debuggability.
+Long-term embedding should remain evolvable based on real usage patterns.
 
 ---
 
-## 11. Design Principles
+## 12. Design Principles
 
 VPE is built on:
 
 - determinism
 - explicitness
-- compile-time safety
-- separation of concerns
+- compile-time validation
 - replayability
-- portability
+- separation of concerns
+- host-bounded execution
+- structural clarity for process truth
+
+These principles are part of the product identity, not just the implementation style.
 
 ---
 
-## 12. Why VPE
+## 13. Why VPE
 
-VPE enables teams to:
+VPE helps teams:
 
-- move business logic out of code
-- reason about processes explicitly
-- validate logic before deployment
-- replay and audit decisions
-- evolve systems safely
+- move scattered business-rule logic into one process-centered authority layer
+- make process behavior more explicit and inspectable
+- validate process structure earlier
+- replay and reason about outcomes with more confidence
+- evolve process logic without burying it in host code
 
 It reduces:
-- hidden complexity
-- runtime surprises
-- duplicated logic
+
+- duplicated transition checks
+- hidden process behavior
+- architecture drift in business logic
+- runtime surprises caused by under-structured process code
 
 ---
 
-## 13. Vision
+## 14. Vision
 
-VPE aims to become:
+VPE aims to become a durable process-governance core for modern systems.
 
-> the standard way to define, validate, and execute business logic in modern systems
+Its long-term value is not only that it executes decisions, but that it gives process-heavy applications a dedicated structural center for lawful reasoning.
 
-A future where:
-- business processes are compiled, not improvised
-- decisions are deterministic, not incidental
-- systems are explainable, not opaque
+A future shaped by VPE looks like this:
+
+- process logic is compiled instead of improvised
+- business-rule structure is explicit instead of scattered
+- decisions are replayable instead of opaque
+- orchestration consumes lawful process outcomes instead of inventing them ad hoc
+- organizations can rely on a real process core instead of burying one inside private infrastructure or low-code shells
 
 ---
 
-## 14. Summary
+## 15. Summary
 
-VPE is a:
+VPE is the process brain of an application.
 
-- deterministic decision engine
-- process compiler
-- bridge between data and execution
+It belongs to the business-rule and process-governance family, but is designed as a deterministic, compiled, host-bounded core for lawful process reasoning.
 
-It complements:
-- workflow engines
-- rules engines
-- policy systems
-- event-driven architectures
+It exists to solve the scattered business-rule problem by giving systems a dedicated structural center for deciding what is allowed to happen next.
 
-It enables:
-- safer systems
-- clearer logic
-- faster iteration
-- stronger guarantees
+Its core boundary is simple:
+
+**VPE decides. The host does.**
