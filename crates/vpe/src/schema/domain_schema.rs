@@ -47,8 +47,8 @@ impl DomainSchema {
         }
     }
 
-    pub fn resolve_path_type(&self, path: &str) -> Option<&SchemaFieldType> {
-        self.resolve_field(path).map(|f| f.field_type()).clone()
+    pub fn resolve_path_type(&self, path: &str) -> Option<SchemaFieldType> {
+        self.resolve_field(path).map(|f| f.field_type().clone())
     }
 }
 
@@ -69,7 +69,7 @@ impl<'a> FieldDefinitionRef<'a> {
     pub fn enum_values(&self) -> Option<&[String]> {
         match self {
             FieldDefinitionRef::User(field) => field.enum_values.as_deref(),
-            FieldDefinitionRef::System(field) => None,
+            FieldDefinitionRef::System(_) => None,
         }
     }
 }
