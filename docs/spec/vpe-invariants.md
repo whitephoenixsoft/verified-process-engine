@@ -156,6 +156,9 @@ Version: Canonical v1.4
 3. New events must reference the Anchor.
 4. The engine itself remains stateless and thread-safe.
 5. The engine must not maintain mutable shared execution state between requests.
+6. A verdict is valid only against the specific Anchor and state projection supplied in the request.
+7. The host must atomically persist the resulting events/state only if that Anchor remains current.
+8. If the Anchor has advanced, the verdict must be discarded and the host must re-evaluate from fresh truth.
 
 ---
 
