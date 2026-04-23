@@ -49,6 +49,10 @@ pub fn validate_law(
 
     for state in &law.states {
         for transition in &state.transitions {
+            if transition.to.is_empty() {
+                return Err(CompileError::EmptyTargetState);
+            }
+
             if !state_names.contains(&transition.to) {
                 return Err(CompileError::UnknownTargetState(
                     transition.to.clone(),
@@ -643,6 +647,15 @@ mod tests {
 
         let result = validate_law(&schema(), &law, &registry());
         assert!(matches!(result, Err(CompileError::UnknownTargetState(_))));
+    }
+
+    #[test]
+    fn rejects_empty_target_state() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].to = "".into();
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::EmptyTargetState)));
     }
 
     #[test]

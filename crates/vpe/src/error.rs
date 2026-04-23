@@ -46,6 +46,9 @@ pub enum CompileError {
 
     #[error("unknown transition target state: {0}")]
     UnknownTargetState(String),
+    
+    #[error("empty target not allowed")]
+    EmptyTargetState,
 }
 
 #[derive(Debug, Error)]
