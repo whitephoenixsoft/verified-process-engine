@@ -68,7 +68,7 @@ pub fn validate_law(
                     ));
                 }
 
-                validate_guard_source(schema, guard)?;
+                warnings.extend(validate_guard_source(schema, guard)?);
             }
         }
 
@@ -223,9 +223,9 @@ fn validate_transition_effects(
 fn validate_guard_source(
     schema: &DomainSchema,
     guard: &GuardSource,
-) -> Result<(), CompileError> {
+) -> Result<Vec<String>, CompileError> {
     match guard.guard_type.as_str() {
-        "Default" => Ok(()),
+        "Default" => Ok(vec![]),
         "GreaterThan" => validate_greater_than_guard(schema, guard),
         "Equals" => validate_equals_guard(schema, guard),
         "OccurredWithin" => validate_occurred_within_guard(guard),
@@ -235,14 +235,14 @@ fn validate_guard_source(
         "MissingField" => validate_missing_field_guard(schema, guard),
         "InSet" => validate_in_set_guard(schema, guard),
         "NotInSet" => validate_in_set_guard(schema, guard),
-        _ => Ok(()),
+        _ => Ok(vec![]),
     }
 }
 
 fn validate_exists_guard(
     schema: &DomainSchema,
     guard: &GuardSource,
-) -> Result<(), CompileError> {
+) -> Result<Vec<String>, CompileError> {
     let path = guard
         .params
         .get("path")
@@ -253,13 +253,13 @@ fn validate_exists_guard(
         .resolve_path_type(path)
         .ok_or_else(|| CompileError::UnresolvedReference(format!("unknown field path '{path}'")))?;
 
-    Ok(())
+    Ok(vec![])
 }
 
 fn validate_missing_field_guard(
     schema: &DomainSchema,
     guard: &GuardSource,
-) -> Result<(), CompileError> {
+) -> Result<Vec<String>, CompileError> {
     let path = guard
         .params
         .get("path")
@@ -270,13 +270,13 @@ fn validate_missing_field_guard(
         .resolve_path_type(path)
         .ok_or_else(|| CompileError::UnresolvedReference(format!("unknown field path '{path}'")))?;
 
-    Ok(())
+    Ok(vec![])
 }
 
 fn validate_in_set_guard(
     schema: &DomainSchema,
     guard: &GuardSource,
-) -> Result<(), CompileError> {
+) -> Result<Vec<String>, CompileError> {
     let path = guard
         .params
         .get("path")
@@ -301,13 +301,13 @@ fn validate_in_set_guard(
         }
     }
 
-    Ok(())
+    Ok(vec![])
 }
 
 fn validate_fields_equal_guard(
     schema: &DomainSchema,
     guard: &GuardSource,
-) -> Result<(), CompileError> {
+) -> Result<Vec<String>, CompileError> {
     let left_path = guard
         .params
         .get("left_path")
@@ -320,6 +320,12 @@ fn validate_fields_equal_guard(
         .and_then(Value::as_str)
         .ok_or_else(|| CompileError::InvalidLaw("FieldsEqual requires string field 'right_path'".into()))?;
 
+    if left_path == right_path {
+        let mut warnings = Vec::new();
+        warnings.push(format!("FieldsEqual compares the same path to itself and is probably redundant: '{}'", left_path));
+        return Ok(warnings);
+    }
+
     let left_type = schema
         .resolve_path_type(left_path)
         .ok_or_else(|| CompileError::UnresolvedReference(format!("unknown field path '{left_path}'")))?;
@@ -329,7 +335,7 @@ fn validate_fields_equal_guard(
         .ok_or_else(|| CompileError::UnresolvedReference(format!("unknown field path '{right_path}'")))?;
 
     if field_types_compatible(&left_type, &right_type) {
-        Ok(())
+        Ok(vec![])
     } else {
         Err(CompileError::TypeMismatch(format!(
             "FieldsEqual requires compatible field types, but '{left_path}' and '{right_path}' differ"
@@ -340,7 +346,7 @@ fn validate_fields_equal_guard(
 fn validate_greater_than_guard(
     schema: &DomainSchema,
     guard: &GuardSource,
-) -> Result<(), CompileError> {
+) -> Result<Vec<String>, CompileError> {
     let path = guard
         .params
         .get("path")
@@ -359,7 +365,7 @@ fn validate_greater_than_guard(
     match field_type {
         SchemaFieldType::Number => {
             if value.is_number() {
-                Ok(())
+                Ok(vec![])
             } else {
                 Err(CompileError::TypeMismatch(format!(
                     "GreaterThan on '{path}' requires numeric value"
@@ -375,7 +381,7 @@ fn validate_greater_than_guard(
 fn validate_equals_guard(
     schema: &DomainSchema,
     guard: &GuardSource,
-) -> Result<(), CompileError> {
+) -> Result<Vec<String>, CompileError> {
     let path = guard
         .params
         .get("path")
@@ -392,7 +398,7 @@ fn validate_equals_guard(
         .ok_or_else(|| CompileError::UnresolvedReference(format!("unknown field path '{path}'")))?;
 
     if value_matches_field(field.clone(), value) {
-        Ok(())
+        Ok(vec![])
     } else {
         Err(CompileError::TypeMismatch(format!(
             "Equals on '{path}' received value incompatible with field type"
@@ -400,7 +406,7 @@ fn validate_equals_guard(
     }
 }
 
-fn validate_occurred_within_guard(guard: &GuardSource) -> Result<(), CompileError> {
+fn validate_occurred_within_guard(guard: &GuardSource) -> Result<Vec<String>, CompileError> {
     let target_action = guard.params.get("target_action").and_then(Value::as_str);
     let window_seconds = guard.params.get("window_seconds").and_then(Value::as_u64);
 
@@ -416,10 +422,10 @@ fn validate_occurred_within_guard(guard: &GuardSource) -> Result<(), CompileErro
         ));
     }
 
-    Ok(())
+    Ok(vec![])
 }
 
-fn validate_time_elapsed_guard(guard: &GuardSource) -> Result<(), CompileError> {
+fn validate_time_elapsed_guard(guard: &GuardSource) -> Result<Vec<String>, CompileError> {
     let seconds = guard.params.get("seconds").and_then(Value::as_u64);
 
     if seconds.is_none() {
@@ -428,7 +434,7 @@ fn validate_time_elapsed_guard(guard: &GuardSource) -> Result<(), CompileError> 
         ));
     }
 
-    Ok(())
+    Ok(vec![])
 }
 
 fn value_matches_field(
@@ -940,6 +946,21 @@ mod tests {
 
         let result = validate_law(&schema(), &law, &registry());
         assert!(matches!(result, Err(CompileError::TypeMismatch(_))));
+    }
+
+    #[test]
+    fn warns_fields_equal_with_same_path_on_left_and_right() {
+        let mut law = valid_law_with_status_comparison();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "FieldsEqual".into(),
+            params: BTreeMap::from([
+                ("left_path".into(), json!("rec.status")),
+                ("right_path".into(), json!("rec.status")),
+            ]),
+        };
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(result.unwrap().iter().any(|w| w.contains("compares the same path")));
     }
 
     #[test]
