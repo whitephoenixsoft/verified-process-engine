@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use crate::compiler::source::{GuardSource, LawSource, EffectMode, StateSource, TransitionSource};
 use crate::error::{CompileError, SchemaError};
 use crate::registry::GuardRegistry;
@@ -61,6 +62,7 @@ pub fn validate_law(
 
             validate_transition_effects(law, state, transition)?;
             
+            let mut required_paths = Vec::new();
             for guard in &transition.guards {
                 if registry.get(&guard.guard_type).is_none() {
                     return Err(CompileError::UnknownGuardType(
@@ -68,8 +70,15 @@ pub fn validate_law(
                     ));
                 }
 
-                warnings.extend(validate_guard_source(schema, guard)?);
+                warnings.extend(validate_guard_source(schema, guard, &mut required_paths)?);
             }
+
+            required_paths.iter()
+                .fold(HashMap::new(), |mut acc, x| {
+                    *acc.entry(x).or_insert(0) += 1; acc})
+                .into_iter()
+                .filter(|&(_, count)| count > 1)
+                .for_each(|(item, _)| warnings.push(format!("duplicate requirements in the same transition: '{}'", item)));
         }
 
         validate_transient_states(law)?;
@@ -223,18 +232,19 @@ fn validate_transition_effects(
 fn validate_guard_source(
     schema: &DomainSchema,
     guard: &GuardSource,
+    required_paths: &mut Vec<String>,
 ) -> Result<Vec<String>, CompileError> {
     match guard.guard_type.as_str() {
         "Default" => Ok(vec![]),
-        "GreaterThan" => validate_greater_than_guard(schema, guard),
-        "Equals" => validate_equals_guard(schema, guard),
+        "GreaterThan" => validate_greater_than_guard(schema, guard, required_paths),
+        "Equals" => validate_equals_guard(schema, guard, required_paths),
         "OccurredWithin" => validate_occurred_within_guard(guard),
         "TimeElapsed" => validate_time_elapsed_guard(guard),
-        "FieldsEqual" => validate_fields_equal_guard(schema, guard),
-        "Exists" => validate_exists_guard(schema, guard),
-        "MissingField" => validate_missing_field_guard(schema, guard),
-        "InSet" => validate_in_set_guard(schema, guard),
-        "NotInSet" => validate_in_set_guard(schema, guard),
+        "FieldsEqual" => validate_fields_equal_guard(schema, guard, required_paths),
+        "Exists" => validate_exists_guard(schema, guard, required_paths),
+        "MissingField" => validate_missing_field_guard(schema, guard, required_paths),
+        "InSet" => validate_in_set_guard(schema, guard, required_paths),
+        "NotInSet" => validate_in_set_guard(schema, guard, required_paths),
         _ => Ok(vec![]),
     }
 }
@@ -242,12 +252,15 @@ fn validate_guard_source(
 fn validate_exists_guard(
     schema: &DomainSchema,
     guard: &GuardSource,
+    required_paths: &mut Vec<String>,
 ) -> Result<Vec<String>, CompileError> {
     let path = guard
         .params
         .get("path")
         .and_then(Value::as_str)
         .ok_or_else(|| CompileError::InvalidLaw("Exists requires string field 'path'".into()))?;
+
+    required_paths.push(path.into());
 
     schema
         .resolve_path_type(path)
@@ -259,12 +272,15 @@ fn validate_exists_guard(
 fn validate_missing_field_guard(
     schema: &DomainSchema,
     guard: &GuardSource,
+    required_paths: &mut Vec<String>,
 ) -> Result<Vec<String>, CompileError> {
     let path = guard
         .params
         .get("path")
         .and_then(Value::as_str)
         .ok_or_else(|| CompileError::InvalidLaw("MissingField requires string field 'path'".into()))?;
+
+    required_paths.push(path.into());
 
     schema
         .resolve_path_type(path)
@@ -276,12 +292,15 @@ fn validate_missing_field_guard(
 fn validate_in_set_guard(
     schema: &DomainSchema,
     guard: &GuardSource,
+    required_paths: &mut Vec<String>,
 ) -> Result<Vec<String>, CompileError> {
     let path = guard
         .params
         .get("path")
         .and_then(Value::as_str)
         .ok_or_else(|| CompileError::InvalidLaw("InSet/NotInSet requires string field 'path'".into()))?;
+
+    required_paths.push(path.into());
 
     let values = guard
         .params
@@ -307,6 +326,7 @@ fn validate_in_set_guard(
 fn validate_fields_equal_guard(
     schema: &DomainSchema,
     guard: &GuardSource,
+    required_paths: &mut Vec<String>,
 ) -> Result<Vec<String>, CompileError> {
     let left_path = guard
         .params
@@ -319,6 +339,9 @@ fn validate_fields_equal_guard(
         .get("right_path")
         .and_then(Value::as_str)
         .ok_or_else(|| CompileError::InvalidLaw("FieldsEqual requires string field 'right_path'".into()))?;
+
+    required_paths.push(left_path.into());
+    required_paths.push(right_path.into());
 
     if left_path == right_path {
         let mut warnings = Vec::new();
@@ -346,12 +369,15 @@ fn validate_fields_equal_guard(
 fn validate_greater_than_guard(
     schema: &DomainSchema,
     guard: &GuardSource,
+    required_paths: &mut Vec<String>,
 ) -> Result<Vec<String>, CompileError> {
     let path = guard
         .params
         .get("path")
         .and_then(Value::as_str)
         .ok_or_else(|| CompileError::InvalidLaw("GreaterThan requires string field 'path'".into()))?;
+
+    required_paths.push(path.into());
 
     let value = guard
         .params
@@ -381,12 +407,15 @@ fn validate_greater_than_guard(
 fn validate_equals_guard(
     schema: &DomainSchema,
     guard: &GuardSource,
+    required_paths: &mut Vec<String>,
 ) -> Result<Vec<String>, CompileError> {
     let path = guard
         .params
         .get("path")
         .and_then(Value::as_str)
         .ok_or_else(|| CompileError::InvalidLaw("Equals requires string field 'path'".into()))?;
+
+    required_paths.push(path.into());
 
     let value = guard
         .params
@@ -671,6 +700,29 @@ mod tests {
 
         let result = validate_law(&schema(), &law, &registry());
         assert!(matches!(result, Err(CompileError::UnknownGuardType(_))));
+    }
+
+    #[test]
+    fn warns_duplicate_requirements_in_same_transition() {
+        let mut law = valid_law();
+        law.states[0].transitions[0].guards[0] = GuardSource {
+            guard_type: "GreaterThan".into(),
+            params: BTreeMap::from([
+                ("path".into(), json!("rec.amount")),
+                ("value".into(), json!(100)),
+            ]),
+        };
+
+        law.states[0].transitions[0].guards.push(GuardSource {
+            guard_type: "Equals".into(),
+            params: BTreeMap::from([
+                ("path".into(), json!("rec.amount")),
+                ("value".into(), json!(100)),
+            ]),
+        });
+
+        let result = validate_law(&schema(), &law, &registry()).unwrap();
+        assert!(result.iter().any(|w| w.contains("duplicate requirements")));
     }
 
     #[test]
