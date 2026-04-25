@@ -181,6 +181,10 @@ Version: Canonical v1.4
 4. The host must supply data consistent with the manifest before execution.
 5. The manifest must be derived entirely at compile time.
 6. Manifest requirements must be a complete superset of all guard dependencies.
+7. The manifest is a runtime enforcement contract.
+8. Runtime must validate manifest completeness before evaluating guards.
+9. Guards must not rely on data outside their declared requirements.
+10. Future guard execution should restrict visibility to declared/manifest-approved data.
 
 ---
 
