@@ -390,18 +390,21 @@ Given a request:
 3. Resolve state index
 4. Filter transitions by action
 5. Sort by priority (deterministic)
-6. Evaluate guards sequentially (short-circuit)
-7. Select first matching transition
-8. Apply transition
-9. Repeat via `AUTO_TICK` while valid (bounded)
-10. Produce Verdict
-11. If no match for non-AUTO_TICK action, return deterministic error
+6. Validate request data against the state manifest
+7. Evaluate guards sequentially (short-circuit)
+8. Select first matching transition
+9. Apply transition
+10. Repeat via `AUTO_TICK` while valid (bounded)
+11. Produce Verdict
+12. If no match for non-AUTO_TICK action, return deterministic error
 
 Runtime guarantees:
 - no side effects
 - no external calls
 - no mutation of inputs
 - no dependency on registry
+- manifest requirements are enforced before guard evaluation
+- guards must not observe undeclared data dependencies
 
 ---
 
@@ -473,6 +476,14 @@ Purpose:
 - minimal data loading
 - predictable execution cost
 - explicit data dependencies
+
+### Manifest Enforcement
+
+The manifest is a runtime data contract, not merely documentation.
+
+Runtime must validate that all required context and history declared by the manifest are present before guard evaluation.
+
+Long-term, runtime should restrict guard-visible data to the manifest-approved slice, preventing guards from relying on undeclared dependencies.
 
 ---
 
