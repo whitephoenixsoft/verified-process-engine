@@ -27,26 +27,13 @@ It is an API and capability-boundary document for process evolution.
 
 ## 2. Core Position
 
-Process evolution is a first-class capability family in VPE, but it is not the same as normal runtime decisioning.
+Simulation and migration are both part of process evolution, but they serve different roles.
 
-Normal runtime decisioning answers:
+- Simulation is an analytical capability used to understand change.
+- Migration (lift) is an operational capability that may also participate in runtime execution.
 
-- what should happen now?
-
-Process evolution answers questions like:
-
-- what would happen if this process changes?
-- does the candidate process remain seamless?
-- where does it diverge?
-- which historical cases become incompatible?
-- can this instance or history be lifted safely to a new version?
-
-These questions are central to VPE’s value, but they should not overload the base runtime surface.
-
-Therefore:
-
-- runtime decisioning belongs in the base application API
-- process evolution belongs in opt-in evolution capabilities
+Simulation remains an opt-in evolution capability.
+Migration may be invoked either through evolution workflows or during normal runtime processing.
 
 ---
 
@@ -67,10 +54,9 @@ A user should not have to abandon the process abstraction just to simulate or mi
 
 ### 3.3 Preserve the semantic center
 
-Simulation and migration must use the same semantic center as the rest of VPE.
+Simulation and replay should not crowd the base application API.
 
-They may expose analysis and transition behavior.  
-They may not invent alternate truth models or alternate meanings for process legality.
+Migration should remain conceptually part of process evolution, but may participate in runtime processing when version differences are encountered.
 
 ### 3.4 Treat evolution as opt-in capability
 
@@ -218,9 +204,23 @@ That does not need to be decided now.
 
 ### 9.1 What migration is
 
-Migration is the response to process evolution when version transition must be handled explicitly.
+Migration is the response to process evolution when version transition must be handled.
 
-If simulation helps teams understand what changes, migration helps define how certain changes are handled safely.
+Simulation answers:
+- what changes?
+
+Migration answers:
+- can this instance be lawfully lifted into the new version?
+- if so, how?
+
+Migration is defined by law-level migration rules, but may be invoked:
+
+- as a separate evolution step
+- or at a runtime boundary when older-version truth is encountered
+
+This makes migration both:
+- an evolution capability
+- and a runtime-enabling mechanism
 
 ### 9.2 Why migration belongs near simulation
 
@@ -237,6 +237,43 @@ Migration asks:
 Migration should be treated as a sibling capability to simulation within the process evolution family.
 
 It should not be forced into the base runtime decision API.
+
+### 9.4 Migration Invocation Modes
+
+Migration may be invoked in two ways:
+
+### On-Access Lift (Preferred)
+Occurs during normal processing when an instance is at an older version.
+
+VPE attempts to lift the instance before continuing decision execution.
+
+### Explicit Migration
+Performed separately for:
+
+- batch upgrades
+- data repair
+- pre-release preparation
+
+Both modes use the same migration rules defined in the law.
+
+The law defines how migration works.  
+The host determines when migration is invoked.
+
+### 9.5 Multi-Version Lift Strategy
+
+VPE must support instances that are multiple versions behind.
+
+Lift strategies include:
+
+- Direct
+- Stepwise
+- PreferDirectThenStepwise
+
+A valid lift must produce a deterministic path.
+
+If no valid path exists under the selected strategy:
+
+→ the result is Incompatible
 
 ---
 
@@ -344,6 +381,21 @@ An evolution result answers:
 
 These should remain distinct.
 
+Simulation and migration use similar but distinct classifications.
+
+Simulation:
+- Seamless
+- Diverted
+- Incompatible
+
+Migration:
+- Direct
+- Lifted
+- Incompatible
+
+Simulation classifies behavioral comparison.  
+Migration classifies version-crossing feasibility.
+
 ### 14.2 Simulation result family
 
 Simulation should likely return dedicated types such as:
@@ -363,6 +415,34 @@ Migration should likely return dedicated types such as:
 - migration plan or summary where appropriate
 
 The exact type names can evolve later, but the separation from runtime decision outcomes should remain.
+
+## 14.4 Migration Result Semantics
+
+Migration results represent a semantic transformation contract, not a guaranteed storage rewrite.
+
+They include:
+
+- target state
+- semantic patch
+- migration event
+- compatibility classification
+
+The host is responsible for:
+
+- applying the patch
+- persisting the migration event
+- maintaining storage consistency
+
+The lift event represents lineage.  
+The semantic patch represents transformation intent.  
+The host commit represents reality.
+
+### 14.5 Invariants 
+
+- version is part of instance truth
+- migration must produce a deterministic lift path
+- incomplete lift paths are invalid
+- incompatible data must not be forced
 
 ---
 
