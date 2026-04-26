@@ -37,6 +37,10 @@ pub fn validate_law(
     let mut state_names = HashSet::new();
 
     for state in &law.states {
+        if state.name.is_empty() {
+            return Err(CompileError::EmptyStateName);
+        }
+
         if !state_names.insert(state.name.clone()) {
             return Err(CompileError::DuplicateState(state.name.clone()));
         }
@@ -673,6 +677,15 @@ mod tests {
 
         let result = validate_law(&schema(), &law, &registry());
         assert!(matches!(result, Err(CompileError::InitialStateNotFound(_))));
+    }
+
+    #[test]
+    fn rejects_empty_state_name() {
+        let mut law = valid_law();
+        law.states[0].name = "".into();
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::EmptyStateName)));
     }
 
     #[test]
