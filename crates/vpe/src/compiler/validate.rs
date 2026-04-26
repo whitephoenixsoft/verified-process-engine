@@ -46,6 +46,10 @@ pub fn validate_law(
         }
     }
 
+    if law.initial_state.is_empty() {
+        return Err(CompileError::EmptyInitialState);
+    }
+
     if !state_names.contains(&law.initial_state) {
         return Err(CompileError::InitialStateNotFound(
             law.initial_state.clone(),
@@ -668,6 +672,15 @@ mod tests {
 
         let result = validate_law(&schema(), &law, &registry());
         assert!(matches!(result, Err(CompileError::DuplicateState(_))));
+    }
+
+    #[test]
+    fn rejects_empty_initial_state() {
+        let mut law = valid_law();
+        law.initial_state = "".into();
+
+        let result = validate_law(&schema(), &law, &registry());
+        assert!(matches!(result, Err(CompileError::EmptyInitialState)));
     }
 
     #[test]

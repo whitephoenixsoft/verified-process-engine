@@ -52,6 +52,9 @@ pub enum CompileError {
 
     #[error("empty state name is not allowed")]
     EmptyStateName,
+
+    #[error("empty initial state is not allowed")]
+    EmptyInitialState,
 }
 
 #[derive(Debug, Error)]
