@@ -86,7 +86,7 @@ pub fn validate_law(
                     *acc.entry(x).or_insert(0) += 1; acc})
                 .into_iter()
                 .filter(|&(_, count)| count > 1)
-                .for_each(|(item, _)| warnings.push(format!("duplicate requirements in the same transition: '{}'", item)));
+                .for_each(|(item, _)| warnings.push(format!("duplicate requirements in the same transition. State: '{}', Transition '{}'", state.name, item)));
         }
 
         validate_transient_states(law)?;
