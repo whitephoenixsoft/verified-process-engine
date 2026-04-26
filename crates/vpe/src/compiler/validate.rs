@@ -57,6 +57,7 @@ pub fn validate_law(
     }
 
     for state in &law.states {
+        let mut transition_tracker = HashSet::new();
         for transition in &state.transitions {
             if transition.to.is_empty() {
                 return Err(CompileError::EmptyTargetState);
@@ -87,6 +88,10 @@ pub fn validate_law(
                 .into_iter()
                 .filter(|&(_, count)| count > 1)
                 .for_each(|(item, _)| warnings.push(format!("duplicate requirements in the same transition. State: '{}', Transition '{}'", state.name, item)));
+
+            if !transition_tracker.insert((transition.action.clone(), transition.priority)) {
+                warnings.push(format!("Multiple transitions share the same action and priority; evaluation order may be  ambiguous. action: '{}'; priority: '{}'", transition.action, transition.priority));
+            }
         }
 
         validate_transient_states(law)?;
@@ -749,6 +754,26 @@ mod tests {
 
         let result = validate_law(&schema(), &law, &registry()).unwrap();
         assert!(result.iter().any(|w| w.contains("duplicate requirements")));
+    }
+
+    #[test]
+    fn warns_duplicate_transition() {
+        let mut law = valid_law();
+
+        law.states[0].transitions.push(TransitionSource {
+            action: "Submit".into(),
+            to: "Approved".into(),
+            priority: 0,
+            guards: vec![GuardSource {
+                guard_type: "Default".into(),
+                params: BTreeMap::<String, Value>::new(),
+            }],
+            effects: vec![],
+            comment: None,
+        });
+
+        let result = validate_law(&schema(), &law, &registry()).unwrap();
+        assert!(result.iter().any(|w| w.contains("ambiguous")));
     }
 
     #[test]
