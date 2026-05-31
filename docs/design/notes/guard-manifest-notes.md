@@ -4,7 +4,7 @@ Dynamic Guard Manifest
 
 ## Problem 
 
-The host cannot call VPE without hard coding each process state prerequisite into its logic before the state is executed.
+The host lacks a discoverable, deterministic contract for required execution inputs.
 
 ## Why it matters 
 
@@ -15,25 +15,32 @@ The host cannot call VPE without hard coding each process state prerequisite int
 
 ## Definitions
 
-- context: the environment supplied by the host to support executing the process state 
-- context requirements: prerequisites needed by the state(s) To be able to make proper decisions. 
-- guard: function specified in a state transition To conditionally direct the state to another state.
-- chronicle: the history preceding the executing state 
-- anchor: the last entry in the history 
-- context field: values needed for the state transition to make a decision 
-- schema: the definition of what valid context field are available
+- Manifest: the listing of dependencies needed to process a law of a state. It consists of required Context fields and history slices.
+- Context: the environment supplied by the host to support executing the process state. It is used by the guard. 
+-  Context sources:
+    - Context fields
+    - Chronicle 
+    - Anchor 
+- Context requirements: part of the context. The prerequisites needed by the state(s) to be able to make proper decisions. They contain history slices and context fields.
+- Guard: a deterministic function that evaluates context and returns a transition decision. Guards are referenced by state transitions. 
+- Chronicle: the history preceding the executing state. It is used by the guard.
+- Anchor: the last entry in the history.
+- Context field: the value from the context needed to make a decision.
+- Schema: the definition of the context fields.
 
 ## Invariants 
 
-- A manifest for the same guards and parameters must be determistic.
-- Context fields must be defined in the schema.
-- A guard must define their own contact requirements.
-- A guard must accept a context when evaluating it's parameters.
-- Context requirements must be available to the guard during runtime.
+- The manifest must deterministically represent the complete set of context requirements for a given law or state.
+- All context requirements referenced by the manifest must be resolvable from the defined context sources.
+- Guard evaluation must be deterministic given the same resolved context inputs.
+- All required context inputs must be resolved prior to guard evaluation.
 
 ## Constraints 
 
 -  Context requirements are specified by the guards
+-  A guard must define their own contact requirements.
+- A guard must accept a context when evaluating it's parameters.
+- Context fields must be defined in the schema.
 - A manifest generated for one state will return the context requirements for the guards of that state. 
 - A manifest generated during compilation will return the context requirements for all states. 
 - Context requirements must be available in the context, chronicle, or the anchor.
@@ -65,17 +72,4 @@ The host cannot call VPE without hard coding each process state prerequisite int
 - guard business logic 
 - manifest file format
 - State transitions
-
-
-
-
-
-
-
-
-
-
-
-
-
 
