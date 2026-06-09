@@ -1,10 +1,10 @@
 # VPE Process Evolution API
 
 Status: Draft  
-Scope: Application-facing and developer-facing API for simulation, replay, and migration-oriented process evolution capabilities  
+Scope: Application-facing and developer-facing API for simulation, replay, explicit migration workflows, diagnostics, and release-readiness analysis  
 Audience: Project architect, core implementers, API designers, test authors, future contributors  
-Depends On: Base runtime/application API, feature strategy, semantic center, simulation and migration roadmap  
-Does NOT define: CLI command syntax, compiler internals, base runtime decision API, persistence/orchestration behavior
+Depends On: VPE Core API, Base runtime/application API, feature strategy, semantic center, simulation and migration roadmap  
+Does NOT define: CLI command syntax, compiler internals, base runtime decision API, persistence/orchestration behavior, canonical lift semantics, canonical migration status vocabulary
 
 ---
 
@@ -14,11 +14,12 @@ This document defines the intended shape of the VPE process evolution API.
 
 It exists to:
 
-- define how simulation and migration capabilities should relate to the main process abstraction
+- define how simulation, replay, and migration workflows relate to the main process abstraction
 - keep process evolution distinct from normal runtime decision execution
-- provide a clean home for regression testing, historical replay, and release-readiness analysis
+- provide a clean home for regression testing, historical replay, migration diagnostics, and release-readiness analysis
 - establish how opt-in evolution capabilities should grow without bloating the base application API
-- prepare a coherent long-term surface for simulation, replay, and migration
+- explain how process evolution uses Core-owned version and lift semantics
+- prepare a coherent long-term surface for simulation, replay, explicit migration operations, and migration tooling
 
 This document is not a workflow guide.  
 It is an API and capability-boundary document for process evolution.
@@ -27,13 +28,41 @@ It is an API and capability-boundary document for process evolution.
 
 ## 2. Core Position
 
-Simulation and migration are both part of process evolution, but they serve different roles.
+Process evolution is the analysis and tooling layer that uses Core-owned runtime and migration semantics.
 
-- Simulation is an analytical capability used to understand change.
-- Migration (lift) is an operational capability that may also participate in runtime execution.
+Core API owns the canonical language of:
 
-Simulation remains an opt-in evolution capability.
-Migration may be invoked either through evolution workflows or during normal runtime processing.
+- version truth
+- version-aware execution
+- lift semantics
+- migration status vocabulary
+- migration error vocabulary
+- lift path semantics
+- migration determinism
+- runtime lift ordering
+
+Process Evolution API owns the capability surfaces for:
+
+- simulation
+- replay
+- comparison
+- regression analysis
+- explicit migration operations
+- batch migration
+- repair workflows
+- migration diagnostics
+- release-readiness analysis
+
+The compact rule is:
+
+Core provides the language.  
+Evolution provides the capabilities.
+
+Simulation is an analytical capability used to understand change.
+
+Replay is a simulation-oriented capability used to evaluate historical truth against candidate process definitions.
+
+Migration, when invoked explicitly as a workflow, belongs to process evolution tooling. However, canonical migration/lift semantics are Core-owned and may also participate in normal runtime processing when version differences are encountered.
 
 ---
 
@@ -43,26 +72,52 @@ Migration may be invoked either through evolution workflows or during normal run
 
 Process evolution should not be collapsed into ordinary runtime decision execution.
 
-The runtime path must remain focused on deciding from current truth.  
-The evolution path must remain focused on analysis, comparison, replay, and transition.
+The runtime path remains focused on executing lawful decisions from current truth.
+
+The evolution path remains focused on:
+
+- analysis
+- comparison
+- replay
+- diagnostics
+- release readiness
+- explicit migration workflows
+
+Simulation and replay model runtime behavior, but they do not become runtime execution.
 
 ### 3.2 Keep evolution close to the process abstraction
 
 Although process evolution is distinct from runtime use, it should still attach naturally to the central process abstraction where possible.
 
-A user should not have to abandon the process abstraction just to simulate or migrate.
+A user should not have to abandon the process abstraction just to simulate, replay, compare, or run explicit migration tooling.
 
 ### 3.3 Preserve the semantic center
 
-Simulation and replay should not crowd the base application API.
+Process evolution must not invent alternate meanings for process legality.
 
-Migration should remain conceptually part of process evolution, but may participate in runtime processing when version differences are encountered.
+Simulation, replay, and migration workflows must use the same semantic center as the rest of VPE.
+
+Where version crossing or lift is involved, Process Evolution imports Core-owned lift semantics rather than redefining them.
 
 ### 3.4 Treat evolution as opt-in capability
 
-Simulation, replay, and migration should not crowd the base application API by default.
+Simulation, replay, comparison, and explicit migration tooling should not crowd the base application API by default.
 
 They should appear through explicit opt-in capability layers.
+
+Feature gating does not change ownership.
+
+If simulation is disabled:
+
+- SimulationResult does not exist
+- ReplayResult does not exist
+- simulation and replay workflows are unavailable
+
+If explicit migration tooling is disabled:
+
+- batch migration and repair workflows may be unavailable
+
+Core migration concepts may still exist even when explicit migration tooling is disabled, because runtime may need to report migration-related outcomes such as MigrationNotConfigured.
 
 ### 3.5 Support release and testing discipline
 
@@ -71,7 +126,44 @@ The evolution API should make it natural to:
 - write regression-style simulation tests
 - compare process versions
 - replay historical truth before release
-- prepare and reason about migration safely
+- evaluate migration readiness
+- diagnose version-crossing failure
+- identify release risk before runtime exposure
+
+### 3.6 Import Core version truth
+
+Process Evolution imports the Core principle:
+
+Version is part of process truth.
+
+An instance is not merely:
+
+- Pending
+
+It is:
+
+- Pending under version X
+
+Version participates in:
+
+- runtime correctness
+- compatibility evaluation
+- lift determination
+- concurrency validation
+- persistence planning
+- simulation correctness
+- replay correctness
+
+### 3.7 Runtime equivalence
+
+Simulation and replay must model lawful runtime behavior.
+
+If runtime would require lift, simulation and replay must also require lift.
+
+A simulation result that could not occur in runtime is invalid.  
+A replay result that could not occur in runtime is invalid.
+
+Simulation differs from runtime only in that simulation does not mutate persisted reality.
 
 ---
 
@@ -83,9 +175,17 @@ The process evolution family should include:
 - comparison of current and proposed process versions
 - scenario-based regression analysis
 - historical replay analysis
-- migration-oriented version transition support
+- explicit migration operations
+- batch migration
+- repair workflows
+- migration diagnostics
+- release-readiness reporting
 
 These are related enough to live under one broader family, even if they are exposed through separate feature flags internally.
+
+Process Evolution does not own canonical migration semantics.
+
+It owns workflows that use Core-owned migration semantics.
 
 ---
 
@@ -101,6 +201,8 @@ The base application API should remain responsible for:
 - normal decision execution
 - decision outcomes for host persistence and dispatch
 
+The base runtime path uses Core semantics for validation, version resolution, lift, decisioning, effects, and host persistence boundaries.
+
 ### 5.2 Process evolution API role
 
 The process evolution API should be responsible for:
@@ -108,13 +210,20 @@ The process evolution API should be responsible for:
 - analysis of proposed process behavior
 - comparison between baseline and candidate processes
 - replay-driven analysis
-- migration-oriented transition support
+- explicit migration workflows
+- migration diagnostics
+- regression reporting
+- release-readiness analysis
 
 ### 5.3 Why this separation matters
 
 If evolution concerns are mixed directly into the base runtime surface, the normal application API becomes harder to understand.
 
-The user should not feel that every ordinary runtime process handle also carries the full surface of analysis, replay, and migration by default.
+The user should not feel that every ordinary runtime process handle also carries the full surface of simulation, replay, comparison, batch migration, repair tooling, and release-readiness reporting by default.
+
+At the same time, simulation and replay must remain runtime-equivalent.
+
+That means they model what runtime would do without becoming runtime itself.
 
 ---
 
@@ -150,6 +259,17 @@ Simulation is not merely a preview helper and not merely an advanced extra.
 
 Simulation is a distinct analysis capability for understanding how process behavior changes under candidate definitions or historical inputs.
 
+Simulation is a non-mutating, runtime-equivalent diagnostic capability.
+
+It answers:
+
+- what would runtime do?
+- what changed?
+- where did behavior diverge?
+- can existing truth survive this change?
+- where does migration, replay, or decision execution fail?
+- what category of correction is likely needed?
+
 ### 7.2 Primary uses of simulation
 
 Simulation should support:
@@ -158,7 +278,9 @@ Simulation should support:
 - baseline-versus-candidate comparison
 - seamless/diverted/incompatible classification
 - historical replay
+- migration-readiness analysis
 - release-readiness analysis
+- diagnostic reporting
 
 ### 7.3 What simulation is not
 
@@ -168,10 +290,14 @@ Simulation should not be treated as:
 - a casual substitute for `decide`
 - a purely CLI-only concern
 - an incidental debugging extra
+- a mutation mechanism
+
+Simulation never mutates persisted reality.
 
 ### 7.4 API consequence
 
-Simulation should not automatically sit in the base runtime surface.  
+Simulation should not automatically sit in the base runtime surface.
+
 It should be available as an opt-in evolution capability.
 
 ---
@@ -192,7 +318,25 @@ Keeping replay under simulation:
 - keeps release-readiness analysis close to scenario comparison
 - makes the capability easier to teach
 
-### 8.3 Future possibility
+### 8.3 Replay and migration
+
+Replay may require migration.
+
+Historical truth may originate from older process versions.
+
+Replay therefore follows:
+
+Historical Truth  
+→ Core Lift Semantics  
+→ Candidate Version  
+→ Decision Evaluation  
+→ Replay Report
+
+Replay must not skip migration when runtime would require migration.
+
+Replay migration failures are valid replay outcomes.
+
+### 8.4 Future possibility
 
 If replay later grows materially different operational needs, it may be revisited as its own feature family.
 
@@ -200,133 +344,194 @@ That does not need to be decided now.
 
 ---
 
-## 9. Migration as an Evolution Capability
+## 9. Migration Workflows as Process Evolution Capabilities
 
-### 9.1 What migration is
+### 9.1 What Process Evolution owns
 
-Migration is the response to process evolution when version transition must be handled.
+Process Evolution owns explicit migration workflows.
 
-Simulation answers:
-- what changes?
+These include:
 
-Migration answers:
-- can this instance be lawfully lifted into the new version?
-- if so, how?
+- explicit migrate()
+- batch migration
+- administrative migration
+- repair workflows
+- pre-release migration checks
+- migration diagnostics
+- migration reporting
+- release-readiness migration analysis
 
-Migration is defined by law-level migration rules, but may be invoked:
+These workflows use Core-owned lift semantics and migration vocabulary.
 
-- as a separate evolution step
-- or at a runtime boundary when older-version truth is encountered
+### 9.2 What Core owns
 
-This makes migration both:
-- an evolution capability
-- and a runtime-enabling mechanism
+Core owns canonical migration and lift semantics, including:
 
-### 9.2 Why migration belongs near simulation
+- version truth
+- LiftStatus
+- LiftOutcome
+- LiftPath
+- LiftStep
+- LiftEvent
+- SemanticPatch
+- MigrationRuleReference
+- IncompatibilityReason
+- migration status vocabulary
+- migration error vocabulary
+- migration determinism
+- ambiguity rejection
+- runtime lift ordering
+- migration rule selection semantics
 
-Simulation and migration are related because they both address process evolution.
+Process Evolution may report these concepts, but it does not define them authoritatively.
 
-Simulation asks:
-- what changes?
+### 9.3 Explicit migration operations
 
-Migration asks:
-- how do we move safely when change is accepted?
+Explicit migration operations are evolution-facing workflows.
 
-### 9.3 API consequence
-
-Migration should be treated as a sibling capability to simulation within the process evolution family.
-
-It should not be forced into the base runtime decision API.
-
-### 9.4 Migration Invocation Modes
-
-Migration may be invoked in two ways:
-
-### On-Access Lift (Preferred)
-Occurs during normal processing when an instance is at an older version.
-
-VPE attempts to lift the instance before continuing decision execution.
-
-### Explicit Migration
-Performed separately for:
+They may be used for:
 
 - batch upgrades
 - data repair
-- pre-release preparation
+- release preparation
+- administrative review
+- migration diagnostics
+- preflight validation
 
-Both modes use the same migration rules defined in the law.
+These operations should be exposed through Process Evolution capabilities rather than forced into the base runtime decision API.
 
-The law defines how migration works.  
-The host determines when migration is invoked.
+### 9.4 On-access lift
 
-### 9.5 Multi-Version Lift Strategy
+On-access lift is a Core runtime concern.
 
-VPE must support instances that are multiple versions behind.
+Process Evolution may analyze, simulate, replay, or report on on-access lift behavior, but it does not own runtime lift semantics.
 
-Lift strategies include:
+### 9.5 Multi-version lift
+
+Core owns the semantic model for multi-version lift strategies such as:
 
 - Direct
 - Stepwise
 - PreferDirectThenStepwise
 
-A valid lift must produce a deterministic path.
-
-If no valid path exists under the selected strategy:
-
-→ the result is Incompatible
+Process Evolution may expose reporting and tooling around these strategies, especially for migration readiness and release analysis.
 
 ---
 
-## 10. Recommended Feature Model
+## 10. Version Crossing Semantics
+
+### 10.1 Version crossing requires a route
+
+Every version crossing requires a declared migration route or a declared compatibility rule.
+
+No implicit version crossing is allowed.
+
+A process instance must not be silently reinterpreted under a different version.
+
+### 10.2 Version crossing does not always transform truth
+
+A version crossing is not automatically a semantic transformation.
+
+A migration route may preserve:
+
+- fields
+- state
+- context shape
+- event meaning
+
+unchanged.
+
+If a declared route exists and no semantic transformation occurs, the Core-owned result is Direct.
+
+If a declared route exists and semantic transformation occurs, the Core-owned result is Lifted.
+
+### 10.3 Default preservation
+
+Default field/state preservation is allowed only when explicitly declared or derived from a declared compatibility rule.
+
+Default preservation must not become implicit migration.
+
+### 10.4 Catch-all migration rules
+
+Catch-all migration rules may exist for ergonomic field preservation and broad compatibility handling.
+
+However, catch-all rules must be:
+
+- declared
+- deterministic
+- version-scoped
+- ordered or prioritized by explicit rule semantics
+- unable to hide ambiguity
+- explainable in simulation output
+
+A catch-all rule must not silently bypass more specific migration rules.
+
+If a catch-all and a specific rule both match, deterministic selection rules must make the result unambiguous.
+
+If deterministic selection is impossible, the Core-owned outcome is AmbiguousMigrationPath.
+
+---
+
+## 11. Recommended Feature Model
 
 The recommended capability model is:
 
 ### Base
+
 - normal runtime application API
 - process handle
 - required-data inspection
 - decision input and outcome
 - decision execution
+- Core-owned version and lift semantics where needed
 
 ### Opt-in evolution capabilities
-- `simulation`
-- `migration`
+
+- simulation
+- replay
+- comparison
+- explicit migration tooling
+- diagnostics
+- release-readiness analysis
 
 The process evolution API described here should assume that these capabilities may be enabled independently while still feeling coherent.
 
 ---
 
-## 11. Recommended API Shape
+## 12. Recommended API Shape
 
-### 11.1 Preferred design direction
+### 12.1 Preferred design direction
 
 The preferred direction is:
 
 - base process abstraction in the application API
-- opt-in extension methods for simulation and later migration
+- opt-in extension methods for simulation and replay
+- opt-in extension methods for explicit migration tooling
 - dedicated evolution result/report types
+- dedicated diagnostic/reporting types
 - builders where complexity is real
 
-### 11.2 Why this is preferred
+### 12.2 Why this is preferred
 
 This keeps:
 
 - runtime decisioning focused
 - evolution capabilities accessible
 - release strategy modular
+- migration tooling explicit
 - future growth cleaner
 
 ---
 
-## 12. Simulation Attachment Strategy
+## 13. Simulation Attachment Strategy
 
-### 12.1 Recommended model
+### 13.1 Recommended model
 
 Simulation should attach to the process abstraction through an extension capability.
 
 This means the user still works with a process handle, but additional simulation methods only appear when simulation support is enabled.
 
-### 12.2 Good outcomes of this model
+### 13.2 Good outcomes of this model
 
 This gives:
 
@@ -335,7 +540,7 @@ This gives:
 - less API crowding in the base surface
 - no need for users to discover a wholly separate object model too early
 
-### 12.3 Suggested entry style
+### 13.3 Suggested entry style
 
 The evolution API should likely provide something conceptually like:
 
@@ -343,112 +548,241 @@ The evolution API should likely provide something conceptually like:
 - simulate scenario
 - compare candidate
 - replay historical set
+- generate simulation report
+- generate release-readiness report
 
 The exact names may evolve, but the key idea is that simulation remains clearly identified as analysis.
 
 ---
 
-## 13. Migration Attachment Strategy
+## 14. Migration Attachment Strategy
 
-### 13.1 Recommended model
+### 14.1 Recommended model
 
-Migration should also attach through an opt-in extension capability.
+Explicit migration tooling should attach through an opt-in evolution capability.
 
-This allows migration to sit beside simulation cleanly as another process evolution mode.
+This allows migration workflows to live near simulation and replay without making migration semantics Process Evolution-owned.
 
-### 13.2 Why this matters
+### 14.2 Why this matters
 
-If simulation is an extension but migration later lands elsewhere, the evolution family will feel inconsistent.
+Migration tooling is a process evolution concern.
 
-Keeping both as parallel capability layers is cleaner.
+Migration semantics are a Core concern.
+
+Keeping those separate avoids both problems:
+
+- Core does not become a release-readiness/reporting layer
+- Process Evolution does not become the authority for runtime migration legality
+
+### 14.3 Rule
+
+Process Evolution uses Core lift semantics.
+
+It does not redefine them.
 
 ---
 
-## 14. Evolution Result Types
+## 15. Evolution Result Types
 
-### 14.1 Why distinct result types matter
+### 15.1 Why distinct result types matter
 
 The result of process evolution analysis is not the same as a normal runtime decision outcome.
 
 A runtime decision outcome answers:
+
 - what should the host do now?
 
 An evolution result answers:
+
 - what changed?
 - how compatible is the candidate?
 - where are the divergences?
 - what is the release or migration risk?
+- what would runtime have done?
+- why did the analysis fail?
+- what category of correction is likely needed?
 
 These should remain distinct.
 
-Simulation and migration use similar but distinct classifications.
+### 15.2 Simulation result family
 
-Simulation:
+Simulation should likely return dedicated types such as:
+
+- SimulationOutcome
+- SimulationReport
+- ComparisonResult
+- RegressionResult
+- ReplayReport
+- ReleaseReadinessReport
+
+### 15.3 Migration workflow result family
+
+Explicit migration workflows should likely return dedicated evolution-facing types such as:
+
+- MigrationWorkflowResult
+- MigrationDiagnosticReport
+- BatchMigrationReport
+- RepairWorkflowReport
+- MigrationReadinessReport
+
+These may contain Core-owned lift outputs such as LiftOutcome, LiftPath, LiftEvent, SemanticPatch, and migration errors.
+
+The exact type names can evolve later, but the separation from runtime decision outcomes should remain.
+
+---
+
+## 16. Simulation Reporting Layers
+
+### 16.1 Layer 1 — Overall simulation outcome
+
+Layer 1 answers:
+
+What happened overall?
+
+Examples:
+
 - Seamless
 - Diverted
 - Incompatible
 
-Migration:
-- Direct
-- Lifted
-- Incompatible
+These are useful high-level classifications but are insufficient by themselves.
 
-Simulation classifies behavioral comparison.  
-Migration classifies version-crossing feasibility.
+### 16.2 Layer 2 — Runtime-equivalent details
 
-### 14.2 Simulation result family
+Layer 2 answers:
 
-Simulation should likely return dedicated types such as:
+What would runtime have done?
 
-- simulation outcome
-- simulation report
-- comparison result
-- replay report
+May include:
 
-### 14.3 Migration result family
+- LiftStatus
+- LiftOutcome
+- LiftPath
+- migration errors
+- decision result
+- semantic patch summary
+- effect changes
 
-Migration should likely return dedicated types such as:
+These details are imported from Core semantics where applicable.
 
-- migration result
-- lift result
-- compatibility report
-- migration plan or summary where appropriate
+### 16.3 Layer 3 — Diagnostic classification
 
-The exact type names can evolve later, but the separation from runtime decision outcomes should remain.
+Layer 3 answers:
 
-## 14.4 Migration Result Semantics
+Why did this happen?
 
-Migration results represent a semantic transformation contract, not a guaranteed storage rewrite.
+Possible diagnostic categories include:
 
-They include:
+- MissingRoute
+- AmbiguousRoute
+- MissingRequiredTruth
+- TransformFailed
+- AnchorHistoryConflict
+- DecisionDiverged
+- EffectChanged
+- StatePathChanged
+- DecisionRejectedAfterLift
+- NoTransitionAfterLift
 
-- target state
-- semantic patch
-- migration event
-- compatibility classification
+### 16.4 Layer 4 — Remediation category
 
-The host is responsible for:
+Layer 4 may answer:
 
-- applying the patch
-- persisting the migration event
-- maintaining storage consistency
+What kind of fix is likely needed?
 
-The lift event represents lineage.  
-The semantic patch represents transformation intent.  
-The host commit represents reality.
+Possible advisory categories include:
 
-### 14.5 Invariants 
+- Add Migration Route
+- Fix Historical Data
+- Add Transform
+- Repair Chronicle
+- Resolve Ambiguity
+- Update Law
+- Add Required Truth
 
-- version is part of instance truth
-- migration must produce a deterministic lift path
-- incomplete lift paths are invalid
-- incompatible data must not be forced
+Remediation categories are advisory.
+
+They must not replace deterministic diagnostics.
 
 ---
 
-## 15. Scenario Simulation
+## 17. Non-Seamless Explanation Invariant
 
-### 15.1 Purpose
+Simulation must be explanatory, not merely classificatory.
+
+Every non-seamless simulation result should include:
+
+- deterministic reason
+- deterministic location
+- deterministic diagnostic classification
+
+Simulation should identify:
+
+- what failed
+- where it failed
+- why it failed
+- what category of fix is required
+
+A vague simulation is not sufficient for release readiness.
+
+---
+
+## 18. Migration During Simulation
+
+If runtime would require migration, simulation must also require migration.
+
+Simulation must never:
+
+- bypass migration
+- ignore migration failures
+- assume latest-version truth
+- reinterpret older truth using newer semantics
+- fabricate migration behavior
+
+Migration failures encountered during simulation are valid simulation outcomes.
+
+Simulation may surface:
+
+- LiftOutcome
+- LiftPath
+- migration status
+- migration errors
+- migration diagnostics
+- furthest reachable version
+- required migration truth
+- incompatibility reasons
+
+These are reported as analytical artifacts.
+
+They are not committed.
+
+---
+
+## 19. Migration During Replay
+
+Replay may require migration.
+
+Historical truth may originate from older process versions.
+
+Replay must follow Core version-transition semantics.
+
+Replay reports may include:
+
+- migration status
+- lift path
+- failed migration step
+- required missing data
+- incompatibility reason
+- ambiguity diagnostics
+- anchor/history conflicts
+
+Replay migration failures are valid replay outcomes.
+
+---
+
+## 20. Scenario Simulation
+
+### 20.1 Purpose
 
 Scenario simulation should support explicit scenario-based analysis.
 
@@ -459,51 +793,61 @@ This is especially useful for:
 - law change review
 - expected-path verification
 
-### 15.2 Why it matters
+### 20.2 Why it matters
 
 This allows teams to define process paths intentionally and then test whether a candidate process behaves as expected.
 
-### 15.3 Relationship to the API
+### 20.3 Relationship to the API
 
 Scenario simulation should be one of the simplest evolution entry points.
 
+Scenario simulation should still follow runtime-equivalent semantics.
+
+If the scenario crosses versions, it must use Core migration semantics.
+
 ---
 
-## 16. Historical Replay
+## 21. Historical Replay
 
-### 16.1 Purpose
+### 21.1 Purpose
 
 Historical replay should support running production-like or production-derived truth through a candidate process before release.
 
-### 16.2 Why it matters
+### 21.2 Why it matters
 
 Historical replay is one of the strongest practical disciplines VPE can enable.
 
 It helps teams stop manually probing production behavior after the fact and instead evaluate process changes against real historical truth before release.
 
-### 16.3 Relationship to the API
+### 21.3 Relationship to the API
 
 Historical replay should feel like a natural evolution mode, not an unrelated subsystem.
 
+Historical replay is especially valuable because it reveals whether existing truth can survive version crossing.
+
 ---
 
-## 17. Regression Testing Role
+## 22. Regression Testing Role
 
-### 17.1 Simulation as test harness
+### 22.1 Simulation as test harness
 
 The evolution API should make it natural to use simulation in tests as a regression harness.
 
-### 17.2 What this enables
+### 22.2 What this enables
 
 Teams can define:
 
 - expected seamless paths
 - intended divergences
 - known incompatible paths
+- expected migration success
+- expected migration failure
+- expected diagnostic categories
+- expected remediation categories
 
 Then verify those expectations against process changes.
 
-### 17.3 Why this belongs in the evolution API
+### 22.3 Why this belongs in the evolution API
 
 This is not normal runtime use and not merely a CLI concern.
 
@@ -511,36 +855,104 @@ It is part of the developer-facing evolution story.
 
 ---
 
-## 18. CLI Relationship
+## 23. Release Readiness
 
-### 18.1 CLI remains important
+### 23.1 Purpose
 
-The CLI should continue to expose simulation-related functionality for:
+Release readiness analysis should evaluate whether a candidate law is safe to expose to runtime.
+
+It must consider both behavioral compatibility and migration readiness.
+
+### 23.2 Migration readiness
+
+A candidate law may preserve decision behavior but still be unsafe if existing truth cannot lawfully reach the target version.
+
+Release readiness should consider:
+
+- behavioral divergence
+- decision incompatibility
+- migration completeness
+- migration ambiguity
+- missing migration rules
+- missing required migration truth
+- incompatible historical states
+- transform failures
+- anchor/history conflicts
+
+A release may fail readiness because migration fails, even if decision behavior appears otherwise valid.
+
+### 23.3 Reporting
+
+Release-readiness reports should summarize:
+
+- seamless cases
+- diverted cases
+- incompatible cases
+- migration failure counts
+- migration failure categories
+- common missing routes
+- common missing required truth
+- ambiguous route groups
+- transform failures
+- decision failures after lift
+- remediation categories
+
+---
+
+## 24. Non-Mutation Rule
+
+Simulation and replay never mutate persisted reality.
+
+When simulation or replay produces migration outputs, those outputs are analytical artifacts only.
+
+Simulation/replay migration outputs must not be treated as committed lineage.
+
+In simulation/replay:
+
+LiftEvent = analytical lineage  
+SemanticPatch = analytical instruction  
+Host commit = absent
+
+This differs from runtime/explicit migration, where the host may choose to persist returned outputs.
+
+---
+
+## 25. CLI Relationship
+
+### 25.1 CLI remains important
+
+The CLI should continue to expose process evolution functionality for:
 
 - authoring feedback
 - direct experimentation
 - debugging
 - ad hoc comparison
+- simulation reporting
+- replay reporting
+- migration diagnostics
+- release-readiness checks
 
-### 18.2 API relationship
+### 25.2 API relationship
 
 The existence of CLI simulation does not reduce the need for a process evolution API.
 
 The CLI serves human workflows.  
 The evolution API serves code-based workflows, tests, and host-side analysis.
 
-### 18.3 Rule
+### 25.3 Rule
 
-The CLI may expose process evolution capabilities.  
+The CLI may expose process evolution capabilities.
+
 It should not be the only practical way to use them.
 
 ---
 
-## 19. What the Process Evolution API Should Not Become
+## 26. What the Process Evolution API Should Not Become
 
 The process evolution API should not become:
 
 - the base runtime API
+- the owner of Core migration semantics
 - a hidden replacement for normal decisioning
 - a persistence framework
 - an orchestration framework
@@ -548,63 +960,84 @@ The process evolution API should not become:
 
 Its center should remain clear:
 
-process change analysis and version transition support.
+process change analysis, replay, diagnostics, explicit migration workflows, and release-readiness support.
 
 ---
 
-## 20. Recommended Immediate Design Decisions
+## 27. Recommended Immediate Design Decisions
 
-The following decisions are recommended now:
+The following decisions are recommended now.
 
-### 20.1 Keep base runtime decisioning separate
-Do not place simulation and migration in the always-on base runtime surface by default.
+### 27.1 Keep base runtime decisioning separate
 
-### 20.2 Attach evolution through extensions
+Do not place simulation, replay, or explicit migration tooling in the always-on base runtime surface by default.
+
+### 27.2 Import Core migration semantics
+
+Do not define canonical lift semantics in the Process Evolution API.
+
+Reference Core as the authority for version truth, lift outcomes, migration vocabulary, migration errors, and migration determinism.
+
+### 27.3 Attach evolution through extensions
+
 Prefer opt-in extension methods on the central process abstraction.
 
-### 20.3 Keep replay under simulation initially
+### 27.4 Keep replay under simulation initially
+
 Avoid premature fragmentation.
 
-### 20.4 Keep distinct evolution result types
+### 27.5 Keep distinct evolution result types
+
 Do not reuse ordinary runtime decision outcomes as the primary analysis results.
 
-### 20.5 Treat migration as the sibling of simulation
-Design the family now so later migration addition feels natural.
+### 27.6 Treat simulation as runtime-equivalent analysis
+
+Simulation should model what runtime would do without mutating reality.
+
+### 27.7 Require explanatory simulation output
+
+Non-seamless simulation results must explain what failed, where it failed, why it failed, and what category of fix is likely needed.
 
 ---
 
-## 21. Open Questions
+## 28. Open Questions
 
 The following questions remain for later refinement:
 
 - what exact extension trait shapes should be used
-- whether builders are the best primary entry point for simulation and migration
+- whether builders are the best primary entry point for simulation, replay, and explicit migration workflows
 - which replay helpers belong directly in the simulation feature
 - whether test harness helpers remain inside simulation or eventually deserve a separate dev/test layer
 - how much low-level candidate-process control should be exposed directly to users
+- whether remediation categories should become first-class enums or advisory report fields
+- how detailed release-readiness reports should be by default
+- how catch-all migration rule reporting should be summarized in large migrations
 
 These questions are real, but they do not need to block the architectural direction.
 
 ---
 
-## 22. Final Summary
+## 29. Final Summary
 
-The VPE process evolution API should provide a clean, first-class home for simulation, replay, and migration-oriented capabilities without bloating the base application runtime surface.
+The VPE Process Evolution API should provide a clean, first-class home for simulation, replay, explicit migration workflows, diagnostics, and release-readiness analysis without bloating the base application runtime surface.
 
 The right model is:
 
+- Core API for version-aware truth and lawful migration semantics
 - base runtime API for normal decisioning
-- opt-in evolution capabilities for process change analysis and version transition support
+- Process Evolution API for analysis and tooling workflows
 - one central process abstraction extended by capability rather than replaced by unrelated new objects
 
-This gives VPE a cleaner long-term shape.
+Core provides the language.
+
+Evolution provides the capabilities.
 
 Runtime remains focused.  
 Evolution remains powerful.  
-Release and testing workflows remain first-class.  
-Future migration support gains a natural place to live.
+Release and testing workflows remain first-class.
 
 The guiding rule is:
 
 Normal decisioning belongs in the base runtime API.  
+Canonical migration semantics belong in Core.  
 Process evolution belongs in opt-in evolution capabilities.
