@@ -732,3 +732,89 @@ The goal is not ceremony.
 The goal is lawful movement.
 
 A stateful process is justified when the system must know not only what happened, but whether what happened was allowed.
+
+---
+
+## State Machine Benefit Checklist
+
+Use this checklist to decide whether a piece of code should remain a simple action/event or be migrated into a stateful process.
+
+| Question | Without State Machine | With State Machine | State Machine Benefit? |
+|---|---:|---:|---:|
+| Can the operation be treated as one atomic step? | Yes | Yes, but may be unnecessary | No |
+| Can the operation pause and resume later? | Hard / informal | Explicitly supported | Yes |
+| Can a human, host, or reviewer intervene? | Usually ad hoc | Modeled as states/transitions | Yes |
+| Can the operation branch into different valid outcomes? | Hidden in conditionals | Explicit transition paths | Yes |
+| Can an action be approved, rejected, or blocked? | Usually custom logic | First-class process outcomes | Yes |
+| Can invalid sequences happen? | Possible unless manually guarded | Prevented by transition rules | Yes |
+| Does the current phase change what actions are allowed? | Hard to see | Clear from current state | Yes |
+| Do you need to explain why something is stuck? | Requires digging through logs | State gives direct explanation | Yes |
+| Do you need deterministic replay? | Possible, but harder | Natural fit with chronicle/events | Yes |
+| Do you need auditability? | Logs may help | State + transition history is stronger | Yes |
+| Do you need to prove the process was followed? | Difficult | Transition history can prove it | Yes |
+| Do you need guard checks before movement? | Manual checks in code | Guards are part of process law | Yes |
+| Do you need different failure outcomes? | Often mixed with errors | Process outcomes can become states | Yes |
+| Do you need to separate technical failure from process rejection? | Often blurred | Clearly separated | Yes |
+| Do you need migration between process versions? | Usually difficult | Versioned laws can support lift/migration | Yes |
+| Do you need simulation before committing? | Custom implementation | Can be modeled as process state/path | Yes |
+| Do you need to prevent partial completion from looking complete? | Risky | Explicit incomplete/intermediate states | Yes |
+| Do you need to support multiple actors? | Often scattered across code | Actor permissions can attach to transitions | Yes |
+| Do you need to make allowed next actions visible? | Hard to infer | Derived from current state | Yes |
+| Is the operation simple, local, and immediately completed? | Good fit | May be overkill | No |
+| Is the workflow still unstable or experimental? | Easier to change | May cause premature rigidity | No / Maybe |
+| Are the states mostly implementation steps? | Simpler as code | State machine may add noise | No |
+| Is no one expected to inspect or resume the middle? | Fine as function | Little benefit | No |
+| Would the state names be vague, like `Processing` or `Handling`? | Better as code/logs | Weak state model | No |
+| Does the process cross a legitimacy boundary? | Risky | Strong fit | Yes |
+| Does the process produce a legitimate artifact? | Possible, but informal | Strong fit | Yes |
+| Does the process need to reject ambiguity? | Manual validation | Explicit blocked/rejected outcome | Yes |
+| Does the process need to prevent silent expansion or silent continuation? | Harder | Strong fit | Yes |
+
+
+---
+
+## Quick Decision Rule
+
+Use a state machine when the answer is **yes** to several of these:
+
+| Question | Yes/No |
+|---|---|
+| Can this process pause? |  |
+| Can it resume later? |  |
+| Can someone intervene? |  |
+| Can it be approved or rejected? |  |
+| Can it be blocked? |  |
+| Can it branch into multiple valid outcomes? |  |
+| Can invalid ordering cause harm? |  |
+| Does the current phase change what is allowed? |  |
+| Does it cross a legitimacy boundary? |  |
+| Does it create or modify a legitimate artifact? |  |
+| Does it require guards before movement? |  |
+| Does it need a replayable chronicle? |  |
+| Does it need audit/proof that the process was followed? |  |
+| Does it need migration/version handling? |  |
+| Would a simple log be insufficient to explain what happened? |  |
+
+If most answers are **no**, keep it as a function, event, or change log.
+
+If several answers are **yes**, especially around pause/resume, intervention, legitimacy, replay, or invalid ordering, it likely deserves a state machine.
+
+---
+
+## VPE Fit Checklist
+
+| VPE Question | Yes/No |
+|---|---|
+| Is there an object moving through a process? |  |
+| Is there a boundary it must cross? |  |
+| Is the boundary legitimacy-sensitive? |  |
+| Are there allowed and forbidden transitions? |  |
+| Are there guards that must pass? |  |
+| Are there effects after successful movement? |  |
+| Are there meaningful process failures? |  |
+| Are there technical failures that must stay separate? |  |
+| Should the process be replayable? |  |
+| Should the process be versioned? |  |
+| Could future laws require migration/lift? |  |
+
+If this table is mostly **yes**, the code is not just code anymore. It is a VPE process candidate.
